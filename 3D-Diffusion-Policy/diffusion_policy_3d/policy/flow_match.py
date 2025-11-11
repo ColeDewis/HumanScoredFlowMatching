@@ -224,7 +224,7 @@ class FlowMatching(BasePolicy):
             cond_data[:,:To,Da:] = nobs_features
             cond_mask[:,:To,Da:] = True
 
-        # run sampling
+        # run sampling via euler integration
         nsample = self.conditional_sample(
             cond_data, 
             cond_mask,
@@ -242,8 +242,6 @@ class FlowMatching(BasePolicy):
         action = action_pred[:,start:end]
         
         # get prediction
-
-
         result = {
             'action': action,
             'action_pred': action_pred,
@@ -273,8 +271,6 @@ class FlowMatching(BasePolicy):
         trajectory = nactions
         cond_data = trajectory
         
-       
-        
         if self.obs_as_global_cond:
             # reshape B, T, ... to B*T
             this_nobs = dict_apply(nobs, 
@@ -299,7 +295,8 @@ class FlowMatching(BasePolicy):
             cond_data = torch.cat([nactions, nobs_features], dim=-1)
             trajectory = cond_data.detach()
 
-
+        # NOTE COLE: The impainting was already here - I'm not really sure if we want/need this
+        # but supposedly it helps. We could remove.
         # generate impainting mask
         condition_mask = self.mask_generator(trajectory.shape)
 
@@ -310,8 +307,7 @@ class FlowMatching(BasePolicy):
         # Sample a random timestep for each image (in range 0, 1), uniform sampled.
         timesteps = torch.rand(bsz, device=trajectory.device).float()
 
-        # Add noise to the clean images according to the noise magnitude at each timestep
-        # (this is the forward diffusion process)
+        # Interpolate trajectory and noise using the timesteps
         noisy_trajectory = timesteps.view(-1, 1, 1) * trajectory + (1 - timesteps).view(-1, 1, 1) * noise
 
         # compute loss mask
@@ -337,12 +333,6 @@ class FlowMatching(BasePolicy):
         loss_dict = {
                 'bc_loss': loss.item(),
             }
-
-        # print(f"t2-t1: {t2-t1:.3f}")
-        # print(f"t3-t2: {t3-t2:.3f}")
-        # print(f"t4-t3: {t4-t3:.3f}")
-        # print(f"t5-t4: {t5-t4:.3f}")
-        # print(f"t6-t5: {t6-t5:.3f}")
         
         return loss, loss_dict
 
