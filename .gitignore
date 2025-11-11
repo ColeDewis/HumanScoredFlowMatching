@@ -1,4 +1,5 @@
 # python related
+.venv/
 *.egg-info/
 *.pyc
 .DS_Store
