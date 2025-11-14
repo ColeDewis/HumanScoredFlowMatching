@@ -42,6 +42,7 @@ class FlowMatching(BasePolicy):
             use_pc_color=False,
             pointnet_type="pointnet",
             pointcloud_encoder_cfg=None,
+            weighted_loss=False,
             # parameters passed to step
             **kwargs):
         super().__init__()
@@ -124,6 +125,7 @@ class FlowMatching(BasePolicy):
         self.n_obs_steps = n_obs_steps
         self.obs_as_global_cond = obs_as_global_cond
         self.kwargs = kwargs
+        self.weighted_loss = weighted_loss
 
         self.num_inference_steps = num_inference_steps
 
@@ -324,7 +326,13 @@ class FlowMatching(BasePolicy):
 
         target = noise - trajectory
 
+
         loss = F.mse_loss(pred, target, reduction='none')
+
+        if self.weighted_loss:
+            weights = batch["weights"].unsqueeze(-1) 
+            loss = weights * loss
+            
         loss = loss * loss_mask.type(loss.dtype)
         loss = reduce(loss, 'b ... -> b (...)', 'mean')
         loss = loss.mean()
