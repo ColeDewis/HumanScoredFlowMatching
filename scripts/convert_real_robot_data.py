@@ -32,12 +32,13 @@ def preprocess_point_cloud(points, use_cuda=True):
     
     num_points = 1024
 
-    extrinsics_matrix = np.array([[ 0.5213259,  -0.84716441,  0.10262438,  0.04268034],
-                                  [ 0.25161211,  0.26751035,  0.93012341,  0.15598059],
-                                  [-0.81542053, -0.45907589,  0.3526169,   0.47807532],
-                                  [ 0.,          0.,          0.,          1.        ]])
+    # extrinsics_matrix = np.array([[ 0.5213259,  -0.84716441,  0.10262438,  0.04268034],
+    #                               [ 0.25161211,  0.26751035,  0.93012341,  0.15598059],
+    #                               [-0.81542053, -0.45907589,  0.3526169,   0.47807532],
+    #                               [ 0.,          0.,          0.,          1.        ]])
+    extrinsics_matrix = get_homogeneous_matrix()
 
-
+    # TODO find workspace for kinova
     WORK_SPACE = [
         [0.65, 1.1],
         [0.45, 0.66],
@@ -45,7 +46,9 @@ def preprocess_point_cloud(points, use_cuda=True):
     ]
 
     # scale
-    point_xyz = points[..., :3]*0.0002500000118743628
+    # TODO: determine if scaling is necessary
+    # point_xyz = points[..., :3]*0.0002500000118743628
+    point_xyz = points[..., :3] 
     point_homogeneous = np.hstack((point_xyz, np.ones((point_xyz.shape[0], 1))))
     point_homogeneous = np.dot(point_homogeneous, extrinsics_matrix)
     point_xyz = point_homogeneous[..., :-1]
@@ -64,6 +67,53 @@ def preprocess_point_cloud(points, use_cuda=True):
     points = np.hstack((points_xyz, points_rgb))
     return points
    
+def get_homogeneous_matrix():
+    # TODO FIND THESE VALUES FROM REAL ROBOT CALIBRATION
+    # TODO ADD TRANSLATIONS INTO THIS IF NEEDED
+    rx_deg = 60  # Rotation around X
+    ry_deg = 180  # Rotation around Y
+    rz_deg = 0  # Rotation around Z
+
+    # Convert to radians
+    rx = np.radians(rx_deg)
+    ry = np.radians(ry_deg)
+    rz = np.radians(rz_deg)
+
+    # Rotation matrix around X-axis
+    Rx = np.array([
+        [1, 0,          0,           0],
+        [0, np.cos(rx), -np.sin(rx), 0],
+        [0, np.sin(rx), np.cos(rx),  0],
+        [0, 0,          0,           1]
+    ])
+
+    # Rotation matrix around Y-axis
+    Ry = np.array([
+        [np.cos(ry),  0, np.sin(ry), 0],
+        [0,           1, 0,          0],
+        [-np.sin(ry), 0, np.cos(ry), 0],
+        [0,           0, 0,          1]
+    ])
+
+    # Rotation matrix around Z-axis
+    Rz = np.array([
+        [np.cos(rz), -np.sin(rz), 0, 0],
+        [np.sin(rz),  np.cos(rz), 0, 0],
+        [0,           0,          1, 0],
+        [0,           0,          0, 1]
+    ])
+
+    # Original extrinsics matrix (identity in this case)
+    extrinsics_matrix = np.eye(4)
+
+    # Combine rotations (Z * Y * X) — typical convention (can change based on your coordinate system)
+    rotation_combined = Rz @ Ry @ Rx
+
+    # Apply rotation to extrinsics
+    rotated_extrinsics = rotation_combined @ extrinsics_matrix
+
+    return rotated_extrinsics
+
 def preproces_image(image):
     img_size = 84
     
@@ -110,39 +160,44 @@ if __name__ == '__main__':
         dir_name = os.path.dirname(demo_dir)
 
         cprint('Processing {}'.format(demo_dir), 'green')
-        with open(demo_dir, 'rb') as f:
-            demo = pickle.load(f)
+        # with open(demo_dir, 'rb') as f:
+        #     demo = pickle.load(f)
 
-        pcd_dirs = os.path.join(dir_name, 'pcd')
-        if not os.path.exists(pcd_dirs):
-            os.makedirs(pcd_dirs)
+        # pcd_dirs = os.path.join(dir_name, 'pcd')
+        # if not os.path.exists(pcd_dirs):
+        #     os.makedirs(pcd_dirs)
             
-        demo_length = len(demo['point_cloud'])
+        # demo_length = len(demo['point_cloud'])
         # dict_keys(['point_cloud', 'rgbd', 'agent_pos', 'action'])
-        for step_idx in tqdm.tqdm(range(demo_length)):
-        
+
+        demo_timesteps = sorted([int(d) for d in os.listdir(demo_dir)])
+        for step_idx in tqdm.tqdm(range(len(demo_timesteps))):
+            timestep_dir = os.path.join(demo_dir, str(demo_timesteps[step_idx]))
+
             total_count += 1
-            obs_image = demo['image'][step_idx]
-            obs_depth = demo['depth'][step_idx]
-            obs_image = preproces_image(obs_image)
-            obs_depth = preproces_image(np.expand_dims(obs_depth, axis=-1)).squeeze(-1)
-            obs_pointcloud = demo['point_cloud'][step_idx]
-            robot_state = demo['agent_pos'][step_idx]
-            action = demo['action'][step_idx]
-        
+            # obs_image = demo['image'][step_idx]
+            # obs_depth = demo['depth'][step_idx]
+            # obs_image = preproces_image(obs_image)
+            # obs_depth = preproces_image(np.expand_dims(obs_depth, axis=-1)).squeeze(-1)
+            # obs_pointcloud = demo['point_cloud'][step_idx]
+            # robot_state = demo['agent_pos'][step_idx]
+            # action = demo['action'][step_idx]
+            obs_image = np.load(os.path.join(timestep_dir, 'rgb.npy'))
+            obs_pointcloud = np.load(os.path.join(timestep_dir, 'depth.npy'))
+            state_info = np.load(os.path.join(timestep_dir, 'low_dim.npy'), allow_pickle=True).item()
+            action = list(state_info['cartesian']['velocity'])
+            robot_state = list(state_info['joints']['position'])
             
-            obs_pointcloud = preprocess_point_cloud(obs_pointcloud, use_cuda=True)
+            # Pointcloud is processed during recording to save space now.
+            # obs_pointcloud = preprocess_point_cloud(obs_pointcloud, use_cuda=True)
             img_arrays.append(obs_image)
             action_arrays.append(action)
             point_cloud_arrays.append(obs_pointcloud)
-            depth_arrays.append(obs_depth)
+            # depth_arrays.append(obs_depth)
             state_arrays.append(robot_state)
         
         episode_ends_arrays.append(total_count)
 
-    
-
-            
 
     # create zarr file
     zarr_root = zarr.group(save_data_path)
@@ -178,7 +233,7 @@ if __name__ == '__main__':
     # print shape
     cprint(f'img shape: {img_arrays.shape}, range: [{np.min(img_arrays)}, {np.max(img_arrays)}]', 'green')
     cprint(f'point_cloud shape: {point_cloud_arrays.shape}, range: [{np.min(point_cloud_arrays)}, {np.max(point_cloud_arrays)}]', 'green')
-    cprint(f'depth shape: {depth_arrays.shape}, range: [{np.min(depth_arrays)}, {np.max(depth_arrays)}]', 'green')
+    # cprint(f'depth shape: {depth_arrays.shape}, range: [{np.min(depth_arrays)}, {np.max(depth_arrays)}]', 'green')
     cprint(f'action shape: {action_arrays.shape}, range: [{np.min(action_arrays)}, {np.max(action_arrays)}]', 'green')
     cprint(f'state shape: {state_arrays.shape}, range: [{np.min(state_arrays)}, {np.max(state_arrays)}]', 'green')
     cprint(f'episode_ends shape: {episode_ends_arrays.shape}, range: [{np.min(episode_ends_arrays)}, {np.max(episode_ends_arrays)}]', 'green')
