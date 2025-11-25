@@ -1,23 +1,16 @@
 import os
-import zarr
 import pickle
-import tqdm
-import numpy as np
-import torch
-import pytorch3d.ops as torch3d_ops
-import torchvision
-from termcolor import cprint
 import re
+import socket
 import time
 
-
 import numpy as np
-import torch
 import pytorch3d.ops as torch3d_ops
+import torch
 import torchvision
-import socket
-import pickle
-
+import tqdm
+import zarr
+from termcolor import cprint
 
 
 def farthest_point_sampling(points, num_points=1024, use_cuda=True):
@@ -83,112 +76,112 @@ def preproces_image(image):
     return image
 
 
+if __name__ == '__main__':
+    expert_data_path = '/home/zhanggu/3D-Diffusion-Policy/3D-Diffusion-Policy/data/realdex_roll'
+    save_data_path = '/home/zhanggu/3D-Diffusion-Policy/3D-Diffusion-Policy/data/realdex_roll.zarr'
+    demo_dirs = [os.path.join(expert_data_path, d, 'data.pkl') for d in os.listdir(expert_data_path) if os.path.isdir(os.path.join(expert_data_path, d))]
 
-expert_data_path = '/home/zhanggu/3D-Diffusion-Policy/3D-Diffusion-Policy/data/realdex_roll'
-save_data_path = '/home/zhanggu/3D-Diffusion-Policy/3D-Diffusion-Policy/data/realdex_roll.zarr'
-demo_dirs = [os.path.join(expert_data_path, d, 'data.pkl') for d in os.listdir(expert_data_path) if os.path.isdir(os.path.join(expert_data_path, d))]
-
-# storage
-total_count = 0
-img_arrays = []
-point_cloud_arrays = []
-depth_arrays = []
-state_arrays = []
-action_arrays = []
-episode_ends_arrays = []
+    # storage
+    total_count = 0
+    img_arrays = []
+    point_cloud_arrays = []
+    depth_arrays = []
+    state_arrays = []
+    action_arrays = []
+    episode_ends_arrays = []
 
 
-if os.path.exists(save_data_path):
-    cprint('Data already exists at {}'.format(save_data_path), 'red')
-    cprint("If you want to overwrite, delete the existing directory first.", "red")
-    cprint("Do you want to overwrite? (y/n)", "red")
-    user_input = 'y'
-    if user_input == 'y':
-        cprint('Overwriting {}'.format(save_data_path), 'red')
-        os.system('rm -rf {}'.format(save_data_path))
+    if os.path.exists(save_data_path):
+        cprint('Data already exists at {}'.format(save_data_path), 'red')
+        cprint("If you want to overwrite, delete the existing directory first.", "red")
+        cprint("Do you want to overwrite? (y/n)", "red")
+        user_input = 'y'
+        if user_input == 'y':
+            cprint('Overwriting {}'.format(save_data_path), 'red')
+            os.system('rm -rf {}'.format(save_data_path))
+        else:
+            cprint('Exiting', 'red')
+            exit()
+    os.makedirs(save_data_path, exist_ok=True)
+
+        
+
+    for demo_dir in demo_dirs:
+        dir_name = os.path.dirname(demo_dir)
+
+        cprint('Processing {}'.format(demo_dir), 'green')
+        with open(demo_dir, 'rb') as f:
+            demo = pickle.load(f)
+
+        pcd_dirs = os.path.join(dir_name, 'pcd')
+        if not os.path.exists(pcd_dirs):
+            os.makedirs(pcd_dirs)
+            
+        demo_length = len(demo['point_cloud'])
+        # dict_keys(['point_cloud', 'rgbd', 'agent_pos', 'action'])
+        for step_idx in tqdm.tqdm(range(demo_length)):
+        
+            total_count += 1
+            obs_image = demo['image'][step_idx]
+            obs_depth = demo['depth'][step_idx]
+            obs_image = preproces_image(obs_image)
+            obs_depth = preproces_image(np.expand_dims(obs_depth, axis=-1)).squeeze(-1)
+            obs_pointcloud = demo['point_cloud'][step_idx]
+            robot_state = demo['agent_pos'][step_idx]
+            action = demo['action'][step_idx]
+        
+            
+            obs_pointcloud = preprocess_point_cloud(obs_pointcloud, use_cuda=True)
+            img_arrays.append(obs_image)
+            action_arrays.append(action)
+            point_cloud_arrays.append(obs_pointcloud)
+            depth_arrays.append(obs_depth)
+            state_arrays.append(robot_state)
+        
+        episode_ends_arrays.append(total_count)
+
+    
+
+            
+
+    # create zarr file
+    zarr_root = zarr.group(save_data_path)
+    zarr_data = zarr_root.create_group('data')
+    zarr_meta = zarr_root.create_group('meta')
+
+    img_arrays = np.stack(img_arrays, axis=0)
+    if img_arrays.shape[1] == 3: # make channel last
+        img_arrays = np.transpose(img_arrays, (0,2,3,1))
+    point_cloud_arrays = np.stack(point_cloud_arrays, axis=0)
+    depth_arrays = np.stack(depth_arrays, axis=0)
+    action_arrays = np.stack(action_arrays, axis=0)
+    state_arrays = np.stack(state_arrays, axis=0)
+    episode_ends_arrays = np.array(episode_ends_arrays)
+
+    compressor = zarr.Blosc(cname='zstd', clevel=3, shuffle=1)
+    img_chunk_size = (100, img_arrays.shape[1], img_arrays.shape[2], img_arrays.shape[3])
+    point_cloud_chunk_size = (100, point_cloud_arrays.shape[1], point_cloud_arrays.shape[2])
+    depth_chunk_size = (100, depth_arrays.shape[1], depth_arrays.shape[2])
+    if len(action_arrays.shape) == 2:
+        action_chunk_size = (100, action_arrays.shape[1])
+    elif len(action_arrays.shape) == 3:
+        action_chunk_size = (100, action_arrays.shape[1], action_arrays.shape[2])
     else:
-        cprint('Exiting', 'red')
-        exit()
-os.makedirs(save_data_path, exist_ok=True)
+        raise NotImplementedError
+    zarr_data.create_dataset('img', data=img_arrays, chunks=img_chunk_size, dtype='uint8', overwrite=True, compressor=compressor)
+    zarr_data.create_dataset('point_cloud', data=point_cloud_arrays, chunks=point_cloud_chunk_size, dtype='float64', overwrite=True, compressor=compressor)
+    zarr_data.create_dataset('depth', data=depth_arrays, chunks=depth_chunk_size, dtype='float64', overwrite=True, compressor=compressor)
+    zarr_data.create_dataset('action', data=action_arrays, chunks=action_chunk_size, dtype='float32', overwrite=True, compressor=compressor)
+    zarr_data.create_dataset('state', data=state_arrays, chunks=(100, state_arrays.shape[1]), dtype='float32', overwrite=True, compressor=compressor)
+    zarr_meta.create_dataset('episode_ends', data=episode_ends_arrays, chunks=(100,), dtype='int64', overwrite=True, compressor=compressor)
 
-    
-
-for demo_dir in demo_dirs:
-    dir_name = os.path.dirname(demo_dir)
-
-    cprint('Processing {}'.format(demo_dir), 'green')
-    with open(demo_dir, 'rb') as f:
-        demo = pickle.load(f)
-
-    pcd_dirs = os.path.join(dir_name, 'pcd')
-    if not os.path.exists(pcd_dirs):
-           os.makedirs(pcd_dirs)
-        
-    demo_length = len(demo['point_cloud'])
-    # dict_keys(['point_cloud', 'rgbd', 'agent_pos', 'action'])
-    for step_idx in tqdm.tqdm(range(demo_length)):
-       
-        total_count += 1
-        obs_image = demo['image'][step_idx]
-        obs_depth = demo['depth'][step_idx]
-        obs_image = preproces_image(obs_image)
-        obs_depth = preproces_image(np.expand_dims(obs_depth, axis=-1)).squeeze(-1)
-        obs_pointcloud = demo['point_cloud'][step_idx]
-        robot_state = demo['agent_pos'][step_idx]
-        action = demo['action'][step_idx]
-    
-        
-        obs_pointcloud = preprocess_point_cloud(obs_pointcloud, use_cuda=True)
-        img_arrays.append(obs_image)
-        action_arrays.append(action)
-        point_cloud_arrays.append(obs_pointcloud)
-        depth_arrays.append(obs_depth)
-        state_arrays.append(robot_state)
-    
-    episode_ends_arrays.append(total_count)
-
- 
-
-        
-
-# create zarr file
-zarr_root = zarr.group(save_data_path)
-zarr_data = zarr_root.create_group('data')
-zarr_meta = zarr_root.create_group('meta')
-
-img_arrays = np.stack(img_arrays, axis=0)
-if img_arrays.shape[1] == 3: # make channel last
-    img_arrays = np.transpose(img_arrays, (0,2,3,1))
-point_cloud_arrays = np.stack(point_cloud_arrays, axis=0)
-depth_arrays = np.stack(depth_arrays, axis=0)
-action_arrays = np.stack(action_arrays, axis=0)
-state_arrays = np.stack(state_arrays, axis=0)
-episode_ends_arrays = np.array(episode_ends_arrays)
-
-compressor = zarr.Blosc(cname='zstd', clevel=3, shuffle=1)
-img_chunk_size = (100, img_arrays.shape[1], img_arrays.shape[2], img_arrays.shape[3])
-point_cloud_chunk_size = (100, point_cloud_arrays.shape[1], point_cloud_arrays.shape[2])
-depth_chunk_size = (100, depth_arrays.shape[1], depth_arrays.shape[2])
-if len(action_arrays.shape) == 2:
-    action_chunk_size = (100, action_arrays.shape[1])
-elif len(action_arrays.shape) == 3:
-    action_chunk_size = (100, action_arrays.shape[1], action_arrays.shape[2])
-else:
-    raise NotImplementedError
-zarr_data.create_dataset('img', data=img_arrays, chunks=img_chunk_size, dtype='uint8', overwrite=True, compressor=compressor)
-zarr_data.create_dataset('point_cloud', data=point_cloud_arrays, chunks=point_cloud_chunk_size, dtype='float64', overwrite=True, compressor=compressor)
-zarr_data.create_dataset('depth', data=depth_arrays, chunks=depth_chunk_size, dtype='float64', overwrite=True, compressor=compressor)
-zarr_data.create_dataset('action', data=action_arrays, chunks=action_chunk_size, dtype='float32', overwrite=True, compressor=compressor)
-zarr_data.create_dataset('state', data=state_arrays, chunks=(100, state_arrays.shape[1]), dtype='float32', overwrite=True, compressor=compressor)
-zarr_meta.create_dataset('episode_ends', data=episode_ends_arrays, chunks=(100,), dtype='int64', overwrite=True, compressor=compressor)
-
-# print shape
-cprint(f'img shape: {img_arrays.shape}, range: [{np.min(img_arrays)}, {np.max(img_arrays)}]', 'green')
-cprint(f'point_cloud shape: {point_cloud_arrays.shape}, range: [{np.min(point_cloud_arrays)}, {np.max(point_cloud_arrays)}]', 'green')
-cprint(f'depth shape: {depth_arrays.shape}, range: [{np.min(depth_arrays)}, {np.max(depth_arrays)}]', 'green')
-cprint(f'action shape: {action_arrays.shape}, range: [{np.min(action_arrays)}, {np.max(action_arrays)}]', 'green')
-cprint(f'state shape: {state_arrays.shape}, range: [{np.min(state_arrays)}, {np.max(state_arrays)}]', 'green')
-cprint(f'episode_ends shape: {episode_ends_arrays.shape}, range: [{np.min(episode_ends_arrays)}, {np.max(episode_ends_arrays)}]', 'green')
-cprint(f'total_count: {total_count}', 'green')
-cprint(f'Saved zarr file to {save_data_path}', 'green')
+    # print shape
+    cprint(f'img shape: {img_arrays.shape}, range: [{np.min(img_arrays)}, {np.max(img_arrays)}]', 'green')
+    cprint(f'point_cloud shape: {point_cloud_arrays.shape}, range: [{np.min(point_cloud_arrays)}, {np.max(point_cloud_arrays)}]', 'green')
+    cprint(f'depth shape: {depth_arrays.shape}, range: [{np.min(depth_arrays)}, {np.max(depth_arrays)}]', 'green')
+    cprint(f'action shape: {action_arrays.shape}, range: [{np.min(action_arrays)}, {np.max(action_arrays)}]', 'green')
+    cprint(f'state shape: {state_arrays.shape}, range: [{np.min(state_arrays)}, {np.max(state_arrays)}]', 'green')
+    cprint(f'episode_ends shape: {episode_ends_arrays.shape}, range: [{np.min(episode_ends_arrays)}, {np.max(episode_ends_arrays)}]', 'green')
+    cprint(f'total_count: {total_count}', 'green')
+    cprint(f'Saved zarr file to {save_data_path}', 'green')
 
