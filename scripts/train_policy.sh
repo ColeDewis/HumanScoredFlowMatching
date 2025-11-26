@@ -34,7 +34,7 @@ else
     echo -e "\033[33mTrain mode\033[0m"
 fi
 
-cd 3D-Diffusion-Policy
+cd flow_policy
 
 
 export HYDRA_FULL_ERROR=1 
