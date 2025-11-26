@@ -12,6 +12,8 @@ import tqdm
 import zarr
 from termcolor import cprint
 
+from visualizer import Visualizer
+
 
 def farthest_point_sampling(points, num_points=1024, use_cuda=True):
     K = [num_points]
@@ -40,9 +42,9 @@ def preprocess_point_cloud(points, use_cuda=True):
 
     # TODO find workspace for kinova
     WORK_SPACE = [
-        [0.65, 1.1],
-        [0.45, 0.66],
-        [-0.7, 0]
+        [-0.5, 0.35],
+        [-1.5, 0],
+        [-0.6, 1]
     ]
 
     # scale
@@ -65,14 +67,17 @@ def preprocess_point_cloud(points, use_cuda=True):
     sample_indices = sample_indices.cpu()
     points_rgb = points[sample_indices, 3:][0]
     points = np.hstack((points_xyz, points_rgb))
+    # vis = Visualizer()
+    # vis.save_visualization_to_file(points, file_path='preprocessed_pointcloud.html')
+    # exit()
     return points
    
 def get_homogeneous_matrix():
     # TODO FIND THESE VALUES FROM REAL ROBOT CALIBRATION
     # TODO ADD TRANSLATIONS INTO THIS IF NEEDED
-    rx_deg = 60  # Rotation around X
+    rx_deg = 45  # Rotation around X
     ry_deg = 180  # Rotation around Y
-    rz_deg = 0  # Rotation around Z
+    rz_deg = -5  # Rotation around Z
 
     # Convert to radians
     rx = np.radians(rx_deg)

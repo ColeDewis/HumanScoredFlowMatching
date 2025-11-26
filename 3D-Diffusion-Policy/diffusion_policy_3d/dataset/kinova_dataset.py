@@ -65,6 +65,7 @@ class KinovaDataset(BaseDataset):
             'action': self.replay_buffer['action'],
             'agent_pos': self.replay_buffer['state'][...,:],
             'point_cloud': self.replay_buffer['point_cloud'],
+            # 'img': self.replay_buffer['img']
         }
         normalizer = LinearNormalizer()
         normalizer.fit(data=data, last_n_dims=1, mode=mode, **kwargs)
