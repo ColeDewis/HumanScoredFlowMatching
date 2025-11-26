@@ -11,7 +11,6 @@ import torchvision
 import tqdm
 import zarr
 from termcolor import cprint
-
 from visualizer import Visualizer
 
 
@@ -132,10 +131,14 @@ def preproces_image(image):
 
 
 if __name__ == '__main__':
-    expert_data_path = '/home/zhanggu/3D-Diffusion-Policy/3D-Diffusion-Policy/data/realdex_roll'
-    save_data_path = '/home/zhanggu/3D-Diffusion-Policy/3D-Diffusion-Policy/data/realdex_roll.zarr'
-    demo_dirs = [os.path.join(expert_data_path, d, 'data.pkl') for d in os.listdir(expert_data_path) if os.path.isdir(os.path.join(expert_data_path, d))]
-
+    # expert_data_path = '/home/zhanggu/3D-Diffusion-Policy/3D-Diffusion-Policy/data/realdex_roll'
+    # save_data_path = '/home/zhanggu/3D-Diffusion-Policy/3D-Diffusion-Policy/data/realdex_roll.zarr'
+    expert_data_path = '/home/user/kinova_flow/data/dataset-21'
+    save_data_path = '/home/user/kinova_flow/data/cube_reach_test.zarr'
+    dirs = os.listdir(expert_data_path)
+    dirs = sorted([int(d) for d in dirs])
+    demo_dirs = [os.path.join(expert_data_path, str(d)) for d in dirs if os.path.isdir(os.path.join(expert_data_path, str(d)))]
+    
     # storage
     total_count = 0
     img_arrays = []
@@ -213,7 +216,7 @@ if __name__ == '__main__':
     if img_arrays.shape[1] == 3: # make channel last
         img_arrays = np.transpose(img_arrays, (0,2,3,1))
     point_cloud_arrays = np.stack(point_cloud_arrays, axis=0)
-    depth_arrays = np.stack(depth_arrays, axis=0)
+    # depth_arrays = np.stack(depth_arrays, axis=0)
     action_arrays = np.stack(action_arrays, axis=0)
     state_arrays = np.stack(state_arrays, axis=0)
     episode_ends_arrays = np.array(episode_ends_arrays)
@@ -221,7 +224,7 @@ if __name__ == '__main__':
     compressor = zarr.Blosc(cname='zstd', clevel=3, shuffle=1)
     img_chunk_size = (100, img_arrays.shape[1], img_arrays.shape[2], img_arrays.shape[3])
     point_cloud_chunk_size = (100, point_cloud_arrays.shape[1], point_cloud_arrays.shape[2])
-    depth_chunk_size = (100, depth_arrays.shape[1], depth_arrays.shape[2])
+    # depth_chunk_size = (100, depth_arrays.shape[1], depth_arrays.shape[2])
     if len(action_arrays.shape) == 2:
         action_chunk_size = (100, action_arrays.shape[1])
     elif len(action_arrays.shape) == 3:
@@ -230,7 +233,7 @@ if __name__ == '__main__':
         raise NotImplementedError
     zarr_data.create_dataset('img', data=img_arrays, chunks=img_chunk_size, dtype='uint8', overwrite=True, compressor=compressor)
     zarr_data.create_dataset('point_cloud', data=point_cloud_arrays, chunks=point_cloud_chunk_size, dtype='float64', overwrite=True, compressor=compressor)
-    zarr_data.create_dataset('depth', data=depth_arrays, chunks=depth_chunk_size, dtype='float64', overwrite=True, compressor=compressor)
+    # zarr_data.create_dataset('depth', data=depth_arrays, chunks=depth_chunk_size, dtype='float64', overwrite=True, compressor=compressor)
     zarr_data.create_dataset('action', data=action_arrays, chunks=action_chunk_size, dtype='float32', overwrite=True, compressor=compressor)
     zarr_data.create_dataset('state', data=state_arrays, chunks=(100, state_arrays.shape[1]), dtype='float32', overwrite=True, compressor=compressor)
     zarr_meta.create_dataset('episode_ends', data=episode_ends_arrays, chunks=(100,), dtype='int64', overwrite=True, compressor=compressor)
