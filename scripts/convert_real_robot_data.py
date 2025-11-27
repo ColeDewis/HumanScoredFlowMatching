@@ -11,6 +11,7 @@ import torchvision
 import tqdm
 import zarr
 from termcolor import cprint
+
 from visualizer import Visualizer
 
 
@@ -134,8 +135,10 @@ def preproces_image(image):
 if __name__ == '__main__':
     # expert_data_path = '/home/zhanggu/3D-Diffusion-Policy/3D-Diffusion-Policy/data/realdex_roll'
     # save_data_path = '/home/zhanggu/3D-Diffusion-Policy/3D-Diffusion-Policy/data/realdex_roll.zarr'
-    expert_data_path = '/home/user/kinova_flow/data/dataset-21'
-    save_data_path = '/home/user/kinova_flow/data/cube_reach_test.zarr'
+    # expert_data_path = '/home/user/kinova_flow/data/dataset-21'
+    # save_data_path = '/home/user/kinova_flow/data/cube_reach_test.zarr'
+    expert_data_path = '/home/coled/720/3D-Diffusion-Policy/flow_policy/data/easy_pickup_bottle_raw'
+    save_data_path = '/home/coled/720/3D-Diffusion-Policy/flow_policy/data/images_pickup_bottle.zarr'
     dirs = os.listdir(expert_data_path)
     dirs = sorted([int(d) for d in dirs])
     demo_dirs = [os.path.join(expert_data_path, str(d)) for d in dirs if os.path.isdir(os.path.join(expert_data_path, str(d)))]
@@ -192,11 +195,12 @@ if __name__ == '__main__':
             # robot_state = demo['agent_pos'][step_idx]
             # action = demo['action'][step_idx]
             obs_image = np.load(os.path.join(timestep_dir, 'rgb.npy'))
+            obs_image = preproces_image(obs_image)
             obs_pointcloud = np.load(os.path.join(timestep_dir, 'depth.npy'))
             state_info = np.load(os.path.join(timestep_dir, 'low_dim.npy'), allow_pickle=True).item()
             gripper_action = state_info['joints']['gripper_action']
             action = list(state_info['cartesian']['velocity'])
-            action.extend(gripper_action)
+            action.append(gripper_action)
             robot_state = list(state_info['joints']['position'])
             
             # Pointcloud is processed during recording to save space now.

@@ -1,11 +1,11 @@
+import copy
+from typing import Dict, List, Optional, Tuple, Type, Union
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision
-import copy
-
-from typing import Optional, Dict, Tuple, Union, List, Type
 from termcolor import cprint
+from torchvision.models import resnet18
 
 
 def create_mlp(
@@ -198,7 +198,32 @@ class PointNetEncoderXYZ(nn.Module):
         """
         self.input_pointcloud = input[0].detach()
 
-    
+
+class ResnetEncoder(nn.Module):
+    def __init__(self, out_channels, flatten=False):
+        """Resnet image encoder
+
+        Args:
+            flatten (bool, optional): if true, flatten the output and produce a vector, not an image. Defaults to False.
+        """
+        super(ResnetEncoder, self).__init__()
+        self.resnet = resnet18(
+            norm_layer=lambda c: nn.GroupNorm(8, c), pretrained=False
+        )
+        if flatten:
+            self.resnet = nn.Sequential(
+                *list(self.resnet.children())[:-1],
+                nn.Flatten(),
+                nn.Linear(512, out_channels)
+            )
+        else:
+            self.resnet = nn.Sequential(*list(self.resnet.children())[:-2])
+
+
+    def forward(self, x):
+        x = x.permute(0, 3, 1, 2)  # B, C, H, W
+        x = self.resnet(x)
+        return x
 
 
 class DP3Encoder(nn.Module):
@@ -215,7 +240,7 @@ class DP3Encoder(nn.Module):
         self.imagination_key = 'imagin_robot'
         self.state_key = 'agent_pos'
         self.point_cloud_key = 'point_cloud'
-        self.rgb_image_key = 'image'
+        self.rgb_image_key = 'img'
         self.n_output_channels = out_channel
         
         self.use_imagined_robot = self.imagination_key in observation_space.keys()
@@ -242,6 +267,9 @@ class DP3Encoder(nn.Module):
             else:
                 pointcloud_encoder_cfg.in_channels = 3
                 self.extractor = PointNetEncoderXYZ(**pointcloud_encoder_cfg)
+        elif pointnet_type == "image":
+            self.extractor = ResnetEncoder(pointcloud_encoder_cfg.out_channels, flatten=True)
+            self.point_cloud_key = "img" # hack
         else:
             raise NotImplementedError(f"pointnet_type: {pointnet_type}")
 
@@ -262,7 +290,8 @@ class DP3Encoder(nn.Module):
 
     def forward(self, observations: Dict) -> torch.Tensor:
         points = observations[self.point_cloud_key]
-        assert len(points.shape) == 3, cprint(f"point cloud shape: {points.shape}, length should be 3", "red")
+        # hack
+        assert len(points.shape) == 3 or self.point_cloud_key == "img", cprint(f"point cloud shape: {points.shape}, length should be 3", "red")
         if self.use_imagined_robot:
             img_points = observations[self.imagination_key][..., :points.shape[-1]] # align the last dim
             points = torch.concat([points, img_points], dim=1)
@@ -279,3 +308,4 @@ class DP3Encoder(nn.Module):
 
     def output_shape(self):
         return self.n_output_channels
+    

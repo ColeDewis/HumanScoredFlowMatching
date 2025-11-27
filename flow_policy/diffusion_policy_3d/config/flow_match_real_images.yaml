@@ -50,7 +50,7 @@ policy:
   # whether to use point cloud's color
   use_pc_color: false
   # type of pointnet
-  pointnet_type: "pointnet"
+  pointnet_type: "image"
 
 
   pointcloud_encoder_cfg:
@@ -97,11 +97,11 @@ training:
   resume: True
   lr_scheduler: cosine
   lr_warmup_steps: 500
-  num_epochs: 2000
+  num_epochs: 1000
   gradient_accumulate_every: 1
   use_ema: True
   rollout_every: 200
-  checkpoint_every: 200
+  checkpoint_every: 50
   val_every: 1
   sample_every: 5
   max_train_steps: null
@@ -112,7 +112,7 @@ logging:
   group: ${exp_name}
   id: null
   mode: online
-  name: flow-${training.seed}
+  name: ${task.name}-${training.seed}
   project: dp3
   resume: true
   tags:
@@ -124,7 +124,7 @@ checkpoint:
   topk:
     monitor_key: test_mean_score
     mode: max
-    k: 15
+    k: 20
     format_str: '${task.name}-epoch={epoch:04d}-test_mean_score={test_mean_score:.3f}.ckpt'
   save_last_ckpt: True # this only saves when save_ckpt is True
   save_last_snapshot: False
