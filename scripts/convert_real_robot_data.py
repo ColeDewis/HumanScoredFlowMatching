@@ -68,6 +68,7 @@ def preprocess_point_cloud(points, use_cuda=True):
     points = np.hstack((points_xyz, points_rgb))
     # vis = Visualizer()
     # vis.save_visualization_to_file(points, file_path='preprocessed_pointcloud.html')
+    # time.sleep(5)
     # exit()
     return points
    
@@ -76,7 +77,7 @@ def get_homogeneous_matrix():
     # TODO ADD TRANSLATIONS INTO THIS IF NEEDED
     rx_deg = 45  # Rotation around X
     ry_deg = 180  # Rotation around Y
-    rz_deg = -5  # Rotation around Z
+    rz_deg = -10  # Rotation around Z
 
     # Convert to radians
     rx = np.radians(rx_deg)
