@@ -193,7 +193,9 @@ if __name__ == '__main__':
             obs_image = np.load(os.path.join(timestep_dir, 'rgb.npy'))
             obs_pointcloud = np.load(os.path.join(timestep_dir, 'depth.npy'))
             state_info = np.load(os.path.join(timestep_dir, 'low_dim.npy'), allow_pickle=True).item()
+            gripper_action = state_info['joints']['gripper_action']
             action = list(state_info['cartesian']['velocity'])
+            action.extend(gripper_action)
             robot_state = list(state_info['joints']['position'])
             
             # Pointcloud is processed during recording to save space now.
