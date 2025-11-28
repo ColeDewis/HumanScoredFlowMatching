@@ -187,6 +187,7 @@ class FlowMatching(BasePolicy):
             nobs['point_cloud'] = nobs['point_cloud'][..., :3]
         this_n_point_cloud = nobs['point_cloud']
         
+        # print(nobs)
         
         value = next(iter(nobs.values()))
         B, To = value.shape[:2]
