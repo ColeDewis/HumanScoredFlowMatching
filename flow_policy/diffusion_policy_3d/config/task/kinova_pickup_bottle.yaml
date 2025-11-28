@@ -18,7 +18,7 @@ env_runner: null
 
 dataset:
   _target_: diffusion_policy_3d.dataset.kinova_dataset.KinovaDataset
-  zarr_path: data/easy_pickup_bottle.zarr
+  zarr_path: data/position_ordered_pickup_bottle.zarr
   horizon: ${horizon}
   pad_before: ${eval:'${n_obs_steps}-1'}
   pad_after: ${eval:'${n_action_steps}-1'}

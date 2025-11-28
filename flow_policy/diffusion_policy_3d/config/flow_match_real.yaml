@@ -125,7 +125,7 @@ checkpoint:
     monitor_key: test_mean_score
     mode: max
     k: 15
-    format_str: '${task.name}-epoch={epoch:04d}-test_mean_score={test_mean_score:.3f}.ckpt'
+    format_str: 'position_${task.name}-epoch={epoch:04d}-test_mean_score={test_mean_score:.3f}.ckpt'
   save_last_ckpt: True # this only saves when save_ckpt is True
   save_last_snapshot: False
 

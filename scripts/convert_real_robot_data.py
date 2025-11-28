@@ -137,8 +137,8 @@ if __name__ == '__main__':
     # save_data_path = '/home/zhanggu/3D-Diffusion-Policy/3D-Diffusion-Policy/data/realdex_roll.zarr'
     # expert_data_path = '/home/user/kinova_flow/data/dataset-21'
     # save_data_path = '/home/user/kinova_flow/data/cube_reach_test.zarr'
-    expert_data_path = '/home/coled/720/3D-Diffusion-Policy/flow_policy/data/easy_pickup_bottle_raw'
-    save_data_path = '/home/coled/720/3D-Diffusion-Policy/flow_policy/data/images_pickup_bottle.zarr'
+    expert_data_path = '/home/coled/720/3D-Diffusion-Policy/flow_policy/data/ordered_pc_bottle'
+    save_data_path = '/home/coled/720/3D-Diffusion-Policy/flow_policy/data/position_ordered_pickup_bottle.zarr'
     dirs = os.listdir(expert_data_path)
     dirs = sorted([int(d) for d in dirs])
     demo_dirs = [os.path.join(expert_data_path, str(d)) for d in dirs if os.path.isdir(os.path.join(expert_data_path, str(d)))]
@@ -199,7 +199,7 @@ if __name__ == '__main__':
             obs_pointcloud = np.load(os.path.join(timestep_dir, 'depth.npy'))
             state_info = np.load(os.path.join(timestep_dir, 'low_dim.npy'), allow_pickle=True).item()
             gripper_action = state_info['joints']['gripper_action']
-            action = list(state_info['cartesian']['velocity'])
+            action = list(state_info['cartesian']['position']) # TODO: change to abs position
             action.append(gripper_action)
             robot_state = list(state_info['joints']['position'])
             
