@@ -137,8 +137,9 @@ if __name__ == '__main__':
     # save_data_path = '/home/zhanggu/3D-Diffusion-Policy/3D-Diffusion-Policy/data/realdex_roll.zarr'
     # expert_data_path = '/home/user/kinova_flow/data/dataset-21'
     # save_data_path = '/home/user/kinova_flow/data/cube_reach_test.zarr'
-    expert_data_path = '/home/coled/720/3D-Diffusion-Policy/flow_policy/data/ordered_pc_bottle'
-    save_data_path = '/home/coled/720/3D-Diffusion-Policy/flow_policy/data/position_ordered_pickup_bottle.zarr'
+    expert_data_path = '/home/coled/720/3D-Diffusion-Policy/flow_policy/data/bottle_cubes_expert'
+    save_data_path = '/home/coled/720/3D-Diffusion-Policy/flow_policy/data/bottle_cubes_expert_no_weights.zarr'
+    HAS_WEIGHTS = False
     dirs = os.listdir(expert_data_path)
     dirs = sorted([int(d) for d in dirs])
     demo_dirs = [os.path.join(expert_data_path, str(d)) for d in dirs if os.path.isdir(os.path.join(expert_data_path, str(d)))]
@@ -151,6 +152,7 @@ if __name__ == '__main__':
     state_arrays = []
     action_arrays = []
     episode_ends_arrays = []
+    weight_arrays = []
 
 
     if os.path.exists(save_data_path):
@@ -181,6 +183,9 @@ if __name__ == '__main__':
             
         # demo_length = len(demo['point_cloud'])
         # dict_keys(['point_cloud', 'rgbd', 'agent_pos', 'action'])
+        if HAS_WEIGHTS:
+            weights = np.load(os.path.join(demo_dir, 'weights.npy'))
+            weight = weights.item() / 10
 
         demo_timesteps = sorted([int(d) for d in os.listdir(demo_dir)])
         for step_idx in tqdm.tqdm(range(len(demo_timesteps))):
@@ -210,6 +215,9 @@ if __name__ == '__main__':
             point_cloud_arrays.append(obs_pointcloud)
             # depth_arrays.append(obs_depth)
             state_arrays.append(robot_state)
+
+            if HAS_WEIGHTS:
+                weight_arrays.append(weight)
         
         episode_ends_arrays.append(total_count)
 
@@ -227,6 +235,8 @@ if __name__ == '__main__':
     action_arrays = np.stack(action_arrays, axis=0)
     state_arrays = np.stack(state_arrays, axis=0)
     episode_ends_arrays = np.array(episode_ends_arrays)
+    if HAS_WEIGHTS:
+        weight_arrays = np.stack(weight_arrays, axis=0)
 
     compressor = zarr.Blosc(cname='zstd', clevel=3, shuffle=1)
     img_chunk_size = (100, img_arrays.shape[1], img_arrays.shape[2], img_arrays.shape[3])
@@ -245,6 +255,10 @@ if __name__ == '__main__':
     zarr_data.create_dataset('state', data=state_arrays, chunks=(100, state_arrays.shape[1]), dtype='float32', overwrite=True, compressor=compressor)
     zarr_meta.create_dataset('episode_ends', data=episode_ends_arrays, chunks=(100,), dtype='int64', overwrite=True, compressor=compressor)
 
+    if HAS_WEIGHTS:
+        weight_chunk_size = (100, weight_arrays.shape[1])
+        zarr_data.create_dataset('weights', data=weight_arrays, chunks=weight_chunk_size, dtype='float32', overwrite=True, compressor=compressor)
+
     # print shape
     cprint(f'img shape: {img_arrays.shape}, range: [{np.min(img_arrays)}, {np.max(img_arrays)}]', 'green')
     cprint(f'point_cloud shape: {point_cloud_arrays.shape}, range: [{np.min(point_cloud_arrays)}, {np.max(point_cloud_arrays)}]', 'green')
@@ -252,6 +266,8 @@ if __name__ == '__main__':
     cprint(f'action shape: {action_arrays.shape}, range: [{np.min(action_arrays)}, {np.max(action_arrays)}]', 'green')
     cprint(f'state shape: {state_arrays.shape}, range: [{np.min(state_arrays)}, {np.max(state_arrays)}]', 'green')
     cprint(f'episode_ends shape: {episode_ends_arrays.shape}, range: [{np.min(episode_ends_arrays)}, {np.max(episode_ends_arrays)}]', 'green')
+    if HAS_WEIGHTS:
+        cprint(f'weights shape: {weight_arrays.shape}, range: [{np.min(weight_arrays)}, {np.max(weight_arrays)}]', 'green')
     cprint(f'total_count: {total_count}', 'green')
     cprint(f'Saved zarr file to {save_data_path}', 'green')
 

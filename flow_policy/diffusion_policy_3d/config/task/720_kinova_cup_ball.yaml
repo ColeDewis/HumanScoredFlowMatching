@@ -1,0 +1,27 @@
+name: 720_kinova_cup_ball
+
+task_name: 720_kinova_cup_ball
+
+shape_meta: &shape_meta
+  # acceptable types: rgb, low_dim
+  obs:
+    point_cloud:
+      shape: [1024, 3]
+      type: point_cloud
+    agent_pos:
+      shape: [8]
+      type: low_dimx
+  action:
+    shape: [7]
+
+env_runner: null
+
+dataset:
+  _target_: diffusion_policy_3d.dataset.kinova_dataset.KinovaDataset
+  zarr_path: data/cup_ball_no_weights.zarr
+  horizon: ${horizon}
+  pad_before: ${eval:'${n_obs_steps}-1'}
+  pad_after: ${eval:'${n_action_steps}-1'}
+  seed: 42
+  val_ratio: 0.0
+  max_train_episodes: 90

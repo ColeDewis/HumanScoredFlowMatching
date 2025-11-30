@@ -112,7 +112,7 @@ logging:
   group: ${exp_name}
   id: null
   mode: online
-  name: flow-${training.seed}
+  name: ${task.name}-${training.seed}
   project: dp3
   resume: true
   tags:
