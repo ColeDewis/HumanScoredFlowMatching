@@ -12,7 +12,7 @@ from diffusion_policy_3d.model.common.normalizer import (
     LinearNormalizer, SingleFieldLinearNormalizer)
 
 
-class KinovaDataset(BaseDataset):
+class WeightedKinovaDataset(BaseDataset):
     def __init__(self,
             zarr_path, 
             horizon=1,

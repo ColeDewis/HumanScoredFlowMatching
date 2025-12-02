@@ -137,9 +137,13 @@ if __name__ == '__main__':
     # save_data_path = '/home/zhanggu/3D-Diffusion-Policy/3D-Diffusion-Policy/data/realdex_roll.zarr'
     # expert_data_path = '/home/user/kinova_flow/data/dataset-21'
     # save_data_path = '/home/user/kinova_flow/data/cube_reach_test.zarr'
-    expert_data_path = '/home/coled/720/3D-Diffusion-Policy/flow_policy/data/bottle_cubes_expert'
-    save_data_path = '/home/coled/720/3D-Diffusion-Policy/flow_policy/data/bottle_cubes_expert_no_weights.zarr'
-    HAS_WEIGHTS = False
+    # expert_data_path = '/home/coled/720/3D-Diffusion-Policy/flow_policy/data/bottle_cubes_expert'
+    # save_data_path = '/home/coled/720/3D-Diffusion-Policy/flow_policy/data/bottle_cubes_expert_no_weights.zarr'
+    # expert_data_path = '/home/coled/720/3D-Diffusion-Policy/flow_policy/data/cup_ball'
+    # save_data_path = '/home/coled/720/3D-Diffusion-Policy/flow_policy/data/cup_ball_with_weights.zarr'
+    expert_data_path = '/home/coled/720/3D-Diffusion-Policy/flow_policy/data/cut_banana'
+    save_data_path = '/home/coled/720/3D-Diffusion-Policy/flow_policy/data/test.zarr'
+    HAS_WEIGHTS = True
     dirs = os.listdir(expert_data_path)
     dirs = sorted([int(d) for d in dirs])
     demo_dirs = [os.path.join(expert_data_path, str(d)) for d in dirs if os.path.isdir(os.path.join(expert_data_path, str(d)))]
@@ -170,7 +174,7 @@ if __name__ == '__main__':
 
         
 
-    for demo_dir in demo_dirs:
+    for i, demo_dir in enumerate(demo_dirs):
         dir_name = os.path.dirname(demo_dir)
 
         cprint('Processing {}'.format(demo_dir), 'green')
@@ -184,10 +188,12 @@ if __name__ == '__main__':
         # demo_length = len(demo['point_cloud'])
         # dict_keys(['point_cloud', 'rgbd', 'agent_pos', 'action'])
         if HAS_WEIGHTS:
-            weights = np.load(os.path.join(demo_dir, 'weights.npy'))
+            # NOTE bad code this assumes there are no skipped directory numbers
+            weights = np.load(os.path.join(demo_dir, f'weights_{i}.npy'))
             weight = weights.item() / 10
+            cprint(f'WEIGHT Using weight: {weight}', "red")
 
-        demo_timesteps = sorted([int(d) for d in os.listdir(demo_dir)])
+        demo_timesteps = sorted([int(d) for d in os.listdir(demo_dir) if os.path.isdir(os.path.join(demo_dir, str(d)))])
         for step_idx in tqdm.tqdm(range(len(demo_timesteps))):
             timestep_dir = os.path.join(demo_dir, str(demo_timesteps[step_idx]))
 
@@ -256,8 +262,7 @@ if __name__ == '__main__':
     zarr_meta.create_dataset('episode_ends', data=episode_ends_arrays, chunks=(100,), dtype='int64', overwrite=True, compressor=compressor)
 
     if HAS_WEIGHTS:
-        weight_chunk_size = (100, weight_arrays.shape[1])
-        zarr_data.create_dataset('weights', data=weight_arrays, chunks=weight_chunk_size, dtype='float32', overwrite=True, compressor=compressor)
+        zarr_data.create_dataset('weights', data=weight_arrays, dtype='float32', overwrite=True, compressor=compressor)
 
     # print shape
     cprint(f'img shape: {img_arrays.shape}, range: [{np.min(img_arrays)}, {np.max(img_arrays)}]', 'green')
