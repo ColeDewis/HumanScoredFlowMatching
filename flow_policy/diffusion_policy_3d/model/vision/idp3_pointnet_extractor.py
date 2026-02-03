@@ -1,7 +1,7 @@
 import copy
 from typing import Dict, List, Optional, Tuple, Type, Union
 
-import diffusion_policy_3d.model.vision_3d.point_process as point_process
+import diffusion_policy_3d.model.vision.point_process as point_process
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

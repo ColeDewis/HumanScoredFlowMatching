@@ -19,7 +19,7 @@ keypoint_visible_rate: 1.0
 obs_as_global_cond: True
 
 policy:
-  _target_: diffusion_policy_3d.policy.flow_match.FlowMatching
+  _target_: diffusion_policy_3d.policy.rtc_flow_match.RTCFlowMatching
   use_point_crop: true
   condition_type: film
   use_down_condition: true
@@ -44,7 +44,8 @@ policy:
   obs_as_global_cond: true
   shape_meta: ${shape_meta}
 
-
+  max_delay: 4
+  inference_delay: 0
 
   # whether to use point cloud's color
   use_pc_color: false
@@ -52,6 +53,7 @@ policy:
   pointnet_type: "multi_stage_pointnet"
   point_downsample: true
 
+  # NOTE: this uses wayy more VRAM than before. Need smaller batch size now.
   pointcloud_encoder_cfg:
     in_channels: 3
     out_channels: 128
@@ -70,14 +72,16 @@ ema:
   max_value: 0.9999
 
 dataloader:
-  batch_size: 128
+  # batch_size: 120
+  batch_size: 64
   num_workers: 8
   shuffle: True
   pin_memory: True
   persistent_workers: False
 
 val_dataloader:
-  batch_size: 128
+  # batch_size: 120
+  batch_size: 64
   num_workers: 8
   shuffle: False
   pin_memory: True
@@ -97,16 +101,17 @@ training:
   resume: True
   lr_scheduler: cosine
   lr_warmup_steps: 500
-  num_epochs: 3000
+  num_epochs: 301
   gradient_accumulate_every: 1
   use_ema: True
-  rollout_every: 200
-  checkpoint_every: 200
-  val_every: 1
+  rollout_every: 400
+  checkpoint_every: 100
+  val_every: 100
   sample_every: 5
   max_train_steps: null
   max_val_steps: null
   tqdm_interval_sec: 1.0
+  save_video: True
 
 logging:
   group: ${exp_name}

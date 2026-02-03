@@ -11,11 +11,12 @@ from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from diffusion_policy_3d.common.model_util import print_params
 from diffusion_policy_3d.common.pytorch_util import dict_apply
 from diffusion_policy_3d.model.common.normalizer import LinearNormalizer
-from diffusion_policy_3d.model.diffusion.mask_generator import LowdimMaskGenerator
-from diffusion_policy_3d.model.diffusion.simple_conditional_unet1d import (
-    ConditionalUnet1D,
-)
-from diffusion_policy_3d.model.vision.idp3_pointnet_extractor import iDP3Encoder
+from diffusion_policy_3d.model.diffusion.mask_generator import \
+    LowdimMaskGenerator
+from diffusion_policy_3d.model.diffusion.simple_conditional_unet1d import \
+    ConditionalUnet1D
+from diffusion_policy_3d.model.vision.idp3_pointnet_extractor import \
+    iDP3Encoder
 from diffusion_policy_3d.model.vision.pointnet_extractor import DP3Encoder
 from diffusion_policy_3d.policy.base_policy import BasePolicy
 from einops import rearrange, reduce
@@ -72,11 +73,12 @@ class RTCFlowMatching(BasePolicy):
 
         # obs_encoder = DP3Encoder(
         #     observation_space=obs_dict,
-        #     img_crop_shape=crop_shape,
-        #     out_channel=encoder_output_dim,
+        #     img_crop_shape=(80, 80),
+        #     out_channel=64,
         #     pointcloud_encoder_cfg=pointcloud_encoder_cfg,
         #     use_pc_color=use_pc_color,
-        #     pointnet_type=pointnet_type,
+        #     # pointnet_type=pointnet_type,
+        #     pointnet_type="pointnet"
         # )
 
         # NOTE: replaced dp3 encoder -> idp3 encoder.
@@ -173,6 +175,9 @@ class RTCFlowMatching(BasePolicy):
             device=condition_data.device,
         )
         prefix_mask = torch.arange(self.horizon)[None, :] < delay  # (1, horizon)
+        prefix_mask = prefix_mask.to(trajectory.device)
+        
+        B = condition_data.shape[0]
 
         delta = 1.0 / self.num_inference_steps
         for t in torch.arange(0, 1, delta):
@@ -181,16 +186,17 @@ class RTCFlowMatching(BasePolicy):
             )
 
             # Get time encoding for this step
-            tau_tensor = torch.tensor(
-                [t], dtype=torch.float, device=condition_data.device
+            tau_tensor = torch.full(
+                (B,), t, device=condition_data.device, dtype=torch.float
             )
 
             # Concatenate the time mask to the input, to tell the model
             # which part is the prefix.
+            tau_map = tau_tensor.view(B, 1, 1).expand(B, self.horizon, 1)
             tau_masked = torch.where(
-                prefix_mask, torch.ones_like(tau_tensor), tau_tensor
+                prefix_mask.unsqueeze(-1), torch.ones_like(tau_map), tau_map
             )
-            model_input = torch.cat([trajectory, tau_masked.unsqueeze(-1)], dim=-1)
+            model_input = torch.cat([trajectory, tau_masked], dim=-1)
 
             # in diffusion policy, but i think we will always do global conditioning
             # so idt this will ever matter since the cond mask will be all 0s
@@ -202,6 +208,7 @@ class RTCFlowMatching(BasePolicy):
                 local_cond=local_cond,
                 global_cond=global_cond,
             )
+            step = step[..., : self.action_dim]  # only keep action dim
 
             # Euler integration step
             trajectory = trajectory - delta * step
@@ -411,6 +418,7 @@ class RTCFlowMatching(BasePolicy):
             local_cond=local_cond,
             global_cond=global_cond,
         )
+        pred = pred[..., : self.action_dim]  # only keep action dim
 
         target = noise - trajectory
 
