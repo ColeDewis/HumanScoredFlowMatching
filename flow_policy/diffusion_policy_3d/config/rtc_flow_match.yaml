@@ -45,7 +45,6 @@ policy:
   shape_meta: ${shape_meta}
 
   max_delay: 4
-  inference_delay: 0
 
   # whether to use point cloud's color
   use_pc_color: false

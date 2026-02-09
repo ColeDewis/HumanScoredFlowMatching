@@ -46,7 +46,6 @@ class RTCFlowMatching(BasePolicy):
         weighted_loss=False,
         point_downsample=False,
         max_delay=4,
-        inference_delay=2,
         # parameters passed to step
         **kwargs,
     ):
@@ -142,7 +141,6 @@ class RTCFlowMatching(BasePolicy):
         self.kwargs = kwargs
         self.weighted_loss = weighted_loss
         self.max_delay = max_delay
-        self.inference_delay = inference_delay
 
         self.num_inference_steps = num_inference_steps
 
@@ -220,7 +218,7 @@ class RTCFlowMatching(BasePolicy):
 
     # NOTE COLE I don't think this has to change at all.
     def predict_action(
-        self, obs_dict: Dict[str, torch.Tensor]
+        self, obs_dict: Dict[str, torch.Tensor], past_actions: torch.Tensor = None
     ) -> Dict[str, torch.Tensor]:
         """
         obs_dict: must include "obs" key
@@ -280,25 +278,28 @@ class RTCFlowMatching(BasePolicy):
             cond_mask[:, :To, Da:] = True
 
         # TODO: pad the action prefix to the correct size.
-        # action_prefix = torch.zeros(
-        #     (B, self.horizon, self.action_dim),
-        #     device=device,
-        #     dtype=dtype
-        # )
-        # if past_actions is not None and self.inference_delay > 0:
-        #     # Insert valid history into the start of the buffer
-        #     action_prefix[:, :past_actions.shape[1], :] = past_actions[:, :past_actions.shape[1], :]
+        action_prefix = torch.zeros(
+            (B, self.horizon, self.action_dim),
+            device=device,
+            dtype=dtype
+        )
+        
+        if past_actions is not None and past_actions.shape[1] > 0:
+            # Insert valid history into the start of the buffer
+            past_actions_normalized = self.normalizer["action"].normalize(past_actions)
+            current_delay = past_actions.shape[1]
+            action_prefix[:, :past_actions.shape[1], :] = past_actions_normalized[:, :past_actions.shape[1], :]
+        else:
+            current_delay = 0
 
         # run sampling via euler integration
-        # TODO: need to make sure we have access to the prefix here, prob change data loader.
-        # TODO: should work other than adding the prefix. Have to figure out how to do that.
         nsample = self.conditional_sample(
-            action_prefix=torch.zeros((B, T, Da), device=device),  # Placeholder!
+            action_prefix=action_prefix,
             condition_data=cond_data,
             condition_mask=cond_mask,
             local_cond=local_cond,
             global_cond=global_cond,
-            delay=self.inference_delay,
+            delay=current_delay,
             **self.kwargs,
         )
 

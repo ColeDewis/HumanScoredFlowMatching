@@ -295,7 +295,37 @@ class TrainDP3Workspace:
                     obs_dict = batch['obs']
                     gt_action = batch['action']
                     
-                    result = policy.predict_action(obs_dict)
+                    # For RTC specifically, condition on some past actions.
+                    if hasattr(policy, 'max_delay') and policy.max_delay > 0:
+                        val_delay = torch.randint(1, policy.max_delay + 1, (1,)).item()
+                        
+                        # Slice the ground truth to create "past actions" to condition inference on
+                        # Shape: (B, val_delay, Action_Dim)
+                        past_actions_input = gt_action[:, :val_delay, :]
+                        result = policy.predict_action(obs_dict, past_actions=past_actions_input)
+                        
+                        # extra debugging metrics for RTC
+                        # Did the model actually overwrite the prefix? Should be ~0.0
+                        history_mse = torch.nn.functional.mse_loss(
+                            pred_action[:, :val_delay], 
+                            past_actions_input
+                        )
+                        step_log['train_cond_fidelity'] = history_mse.item()
+
+                        # Trying to measure Boundary Smoothness 
+                        # We measure the change in velocity across the boundary (indices: d-2, d-1, d)
+                        # v_in: Velocity of the last step of history
+                        v_in = pred_action[:, val_delay-1] - pred_action[:, val_delay-2]
+                        
+                        # v_out: Velocity of the first predicted step
+                        v_out = pred_action[:, val_delay] - pred_action[:, val_delay-1]
+
+                        boundary_jerk = torch.nn.functional.mse_loss(v_out, v_in)
+                        step_log['train_boundary_smoothness'] = boundary_jerk.item()
+                        
+                    else:
+                        result = policy.predict_action(obs_dict)
+                        
                     pred_action = result['action_pred']
                     mse = torch.nn.functional.mse_loss(pred_action, gt_action)
                     step_log['train_action_mse_error'] = mse.item()
