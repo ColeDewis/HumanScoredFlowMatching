@@ -38,6 +38,7 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import OmegaConf
 from termcolor import cprint
 from torch.utils.data import DataLoader
+import matplotlib.pyplot as plt
 
 OmegaConf.register_new_resolver("eval", eval, replace=True)
 
@@ -296,7 +297,7 @@ class TrainDP3Workspace:
                     gt_action = batch['action']
                     
                     # For RTC specifically, condition on some past actions.
-                    if hasattr(policy, 'max_delay') and policy.max_delay > 0:
+                    if hasattr(policy, 'max_delay') and policy.max_delay >= 2:
                         val_delay = torch.randint(1, policy.max_delay + 1, (1,)).item()
                         
                         # Slice the ground truth to create "past actions" to condition inference on
@@ -304,6 +305,7 @@ class TrainDP3Workspace:
                         past_actions_input = gt_action[:, :val_delay, :]
                         result = policy.predict_action(obs_dict, past_actions=past_actions_input)
                         
+                        pred_action = result['action_pred']
                         # extra debugging metrics for RTC
                         # Did the model actually overwrite the prefix? Should be ~0.0
                         history_mse = torch.nn.functional.mse_loss(
@@ -324,11 +326,52 @@ class TrainDP3Workspace:
                         step_log['train_boundary_smoothness'] = boundary_jerk.item()
                         
                     else:
+                        val_delay = 0
                         result = policy.predict_action(obs_dict)
                         
                     pred_action = result['action_pred']
                     mse = torch.nn.functional.mse_loss(pred_action, gt_action)
                     step_log['train_action_mse_error'] = mse.item()
+                    
+                    
+                    # TODO: add a config flag on whether we do this plotting,
+                    # since I have a feeling it might be slow..
+                    gt_np = gt_action[0].detach().cpu().numpy()
+                    pred_np = pred_action[0].detach().cpu().numpy()
+                    
+                    # 2. Setup Plot (Limit to 6 dimensions to keep it readable)
+                    n_dims = gt_np.shape[-1]
+                    n_plots = min(n_dims, 6)
+                    
+                    fig, axes = plt.subplots(n_plots, 1, figsize=(10, 2 * n_plots), sharex=True)
+                    if n_plots == 1: axes = [axes] # Handle single dim case
+
+                    for d in range(n_plots):
+                        ax = axes[d]
+                        # Plot Ground Truth (Black Solid)
+                        ax.plot(gt_np[:, d], label='Ground Truth', color='black', alpha=0.6, linewidth=2)
+                        # Plot Prediction (Red Dashed)
+                        ax.plot(pred_np[:, d], label='Prediction', color='red', linestyle='--', alpha=0.8, linewidth=2)
+                        
+                        # 3. Highlight the "History" Context if used
+                        if val_delay > 0:
+                            ax.axvline(x=val_delay - 1, color='blue', linestyle=':', alpha=0.5)
+                            ax.axvspan(0, val_delay - 1, color='blue', alpha=0.1, label='Conditioning (History)')
+                            
+                        ax.set_ylabel(f'Dim {d}')
+                        ax.grid(True, alpha=0.3)
+                        if d == 0:
+                            ax.legend(loc='upper right', fontsize='small')
+
+                    plt.tight_layout()
+                    
+                    # 4. Add Image to step_log
+                    step_log['train_trajectory_vis'] = wandb.Image(fig)
+                    
+                    plt.close(fig)
+                    
+                    del fig
+                    del axes
                     del batch
                     del obs_dict
                     del gt_action

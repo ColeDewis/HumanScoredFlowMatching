@@ -213,6 +213,12 @@ class RTCFlowMatching(BasePolicy):
 
         # finally make sure conditioning is enforced
         # trajectory[condition_mask] = condition_data[condition_mask]
+        
+        
+        # finally, enforce prefix
+        trajectory = torch.where(
+            prefix_mask.unsqueeze(-1), action_prefix, trajectory
+        )
 
         return trajectory
 
@@ -384,11 +390,14 @@ class RTCFlowMatching(BasePolicy):
 
         # Interpolate trajectory and noise using the timesteps
         # sample random delay, then generate a mask to not compute loss for that prefix.
-        delay = torch.randint(
-            0, self.max_delay, (bsz,), device=trajectory.device
-        ).unsqueeze(
-            -1
-        )  # (bsz, 1)
+        if self.max_delay > 0:
+            delay = torch.randint(
+                0, self.max_delay, (bsz,), device=trajectory.device
+            ).unsqueeze(
+                -1
+            )  # (bsz, 1)
+        else:
+            delay = torch.zeros((bsz, 1), device=trajectory.device, dtype=torch.long)
         prefix_mask = (
             torch.arange(horizon)[None, :].to(trajectory.device) < delay
         )  # (bsz, horizon)

@@ -1,7 +1,7 @@
 defaults:
-  - task: adroit_hammer
+  - task: wam_banana
 
-name: train_simple_dp3
+name: train_rtc_flowmatch
 
 
 task_name: ${task.name}
@@ -44,7 +44,7 @@ policy:
   obs_as_global_cond: true
   shape_meta: ${shape_meta}
 
-  max_delay: 4
+  max_delay: 0 # 4
 
   # whether to use point cloud's color
   use_pc_color: false
@@ -116,11 +116,11 @@ logging:
   group: ${exp_name}
   id: null
   mode: online
-  name: ${training.seed}
-  project: dp3
+  name: rtc_flow_match-${task.name}-${training.seed}
+  project: dp3-flow
   resume: true
   tags:
-  - dp3
+  - dp3-flow
 
 
 checkpoint:

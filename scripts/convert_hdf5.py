@@ -26,8 +26,8 @@ def preproces_image(image):
 
 
 if __name__ == "__main__":
-    expert_data_path = "/home/coled/HumanScoredFlowMatching/data/wam_test_data"
-    save_data_path = "/home/coled/HumanScoredFlowMatching/data/test.zarr"
+    expert_data_path = "/home/coled/HumanScoredFlowMatching/flow_policy/data/banana_wam"
+    save_data_path = "/home/coled/HumanScoredFlowMatching/flow_policy/data/banana_wam_unwrapped.zarr"
 
     dirs = os.listdir(expert_data_path)
     dirs = sorted(
@@ -86,6 +86,11 @@ if __name__ == "__main__":
         
         action = demo_cart["position"]
         robot_state = demo_joints["position"]
+        
+        # NOTE: we maybe should figure out a better angle rep rather than whatever this is..
+        rotations = action[:, 3:6]
+        unwrapped_rotations = np.unwrap(rotations, axis=0)
+        action = np.concatenate([action[:, :3], unwrapped_rotations], axis=-1)
 
         action_arrays.extend(action)
         state_arrays.extend(robot_state)
