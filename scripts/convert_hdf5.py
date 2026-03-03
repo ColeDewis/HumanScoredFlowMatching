@@ -4,13 +4,13 @@ import re
 import socket
 import time
 
+import h5py
 import numpy as np
 import torch
 import torchvision
 import tqdm
 import zarr
 from termcolor import cprint
-import h5py
 
 
 def preproces_image(image):
@@ -26,8 +26,10 @@ def preproces_image(image):
 
 
 if __name__ == "__main__":
-    expert_data_path = "/home/coled/HumanScoredFlowMatching/flow_policy/data/banana_wam"
-    save_data_path = "/home/coled/HumanScoredFlowMatching/flow_policy/data/banana_wam_unwrapped.zarr"
+    # expert_data_path = "/home/coled/HumanScoredFlowMatching/flow_policy/data/banana_wam"
+    # save_data_path = "/home/coled/HumanScoredFlowMatching/flow_policy/data/banana_wam_unwrapped.zarr"
+    expert_data_path = "/home/coled/720/3D-Diffusion-Policy/flow_policy/data/franka_test"
+    save_data_path = "/home/coled/720/3D-Diffusion-Policy/flow_policy/data/franka_test.zarr"
 
     dirs = os.listdir(expert_data_path)
     dirs = sorted(
@@ -79,6 +81,8 @@ if __name__ == "__main__":
             img_arrays.extend(demo_images)
         if has_pointclouds:
             demo_pointclouds = data["pointcloud"]
+            if i == 4: # HACK idk how this is mismatched???
+                demo_pointclouds = demo_pointclouds[:-1]
             point_cloud_arrays.extend(demo_pointclouds)
         
         demo_cart = data["cartesian"]
@@ -86,11 +90,15 @@ if __name__ == "__main__":
         
         action = demo_cart["position"]
         robot_state = demo_joints["position"]
+        gripper = data['gripper']
+        gripper = np.where(gripper[:] < 0.01, 1, 0)
+        
+
         
         # NOTE: we maybe should figure out a better angle rep rather than whatever this is..
         rotations = action[:, 3:6]
         unwrapped_rotations = np.unwrap(rotations, axis=0)
-        action = np.concatenate([action[:, :3], unwrapped_rotations], axis=-1)
+        action = np.concatenate([action[:, :3], unwrapped_rotations, gripper], axis=-1)
 
         action_arrays.extend(action)
         state_arrays.extend(robot_state)
