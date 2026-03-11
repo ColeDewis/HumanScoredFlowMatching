@@ -63,7 +63,7 @@ if __name__ == "__main__":
     axs[0].bar(bin_centers, counts_banana_self, width=0.8, color=colors[0], edgecolor='black')
     axs[1].bar(bin_centers, counts_cubes_self, width=0.8, color=colors[1], edgecolor='black')
     axs[2].bar(bin_centers, counts_cupball_self, width=0.8, color=colors[2], edgecolor='black')
-    for ax, title in zip(axs, ['CutBanana', 'BottleCubes', 'CupBall']):
+    for ax, title in zip(axs, ['Cut Banana', 'Pickup Bottle', 'Ball in Mug']):
         ax.set_title(title, fontsize=16)
         ax.set_ylabel('Count', fontsize=14)
         ax.set_xlim(0.5, 10.5)
@@ -71,9 +71,11 @@ if __name__ == "__main__":
         ax.set_xticklabels(bin_centers, fontsize=13)
         ax.set_ylim(0, y_max_self + 1)
         ax.tick_params(axis='both', which='major', labelsize=12)
-        ax.grid(axis='y', linestyle='--', alpha=0.6)
+        ax.tick_params(axis='x', labelbottom=True)
+        # ax.grid(axis='y', linestyle='--', alpha=0.6)
         ax.set_xlabel('Rating', fontsize=14)
     plt.subplots_adjust(hspace=0.32)
+    plt.tight_layout()
 
     # --- CROSS RATINGS ---
     banana_cross = pd.concat([get_self_cross_scores(ratings_banana, r)[1] for r in raters], ignore_index=True)
@@ -89,7 +91,7 @@ if __name__ == "__main__":
     axs[0].bar(bin_centers, counts_banana_cross, width=0.8, color=colors[0], edgecolor='black')
     axs[1].bar(bin_centers, counts_cubes_cross, width=0.8, color=colors[1], edgecolor='black')
     axs[2].bar(bin_centers, counts_cupball_cross, width=0.8, color=colors[2], edgecolor='black')
-    for ax, title in zip(axs, ['CutBanana', 'BottleCubes', 'CupBall']):
+    for ax, title in zip(axs, ['Cut Banana', 'Pickup Bottle', 'Ball in Mug']):
         ax.set_title(title, fontsize=16)
         ax.set_ylabel('Count', fontsize=14)
         ax.set_xlim(0.5, 10.5)
@@ -97,8 +99,10 @@ if __name__ == "__main__":
         ax.set_xticklabels(bin_centers, fontsize=13)
         ax.set_ylim(0, y_max_cross + 1)
         ax.tick_params(axis='both', which='major', labelsize=12)
-        ax.grid(axis='y', linestyle='--', alpha=0.6)
+        ax.tick_params(axis='x', labelbottom=True)
+        # ax.grid(axis='y', linestyle='--', alpha=0.6)
         ax.set_xlabel('Rating', fontsize=14)
     plt.subplots_adjust(hspace=0.32)
+    plt.tight_layout()
 
     plt.show()

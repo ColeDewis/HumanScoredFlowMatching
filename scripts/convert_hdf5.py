@@ -28,8 +28,8 @@ def preproces_image(image):
 if __name__ == "__main__":
     # expert_data_path = "/home/coled/HumanScoredFlowMatching/flow_policy/data/banana_wam"
     # save_data_path = "/home/coled/HumanScoredFlowMatching/flow_policy/data/banana_wam_unwrapped.zarr"
-    expert_data_path = "/home/serg/projects/HumanScoredFlowMatching/flow_policy/data/banana"
-    save_data_path = "/home/serg/projects/HumanScoredFlowMatching/flow_policy/data/banana.zarr"
+    expert_data_path = "/home/coled/720/3D-Diffusion-Policy/flow_policy/data/peartabletest60"
+    save_data_path = "/home/coled/720/3D-Diffusion-Policy/flow_policy/data/peartabletest60_cart.zarr"
 
     dirs = os.listdir(expert_data_path)
     dirs = sorted(
@@ -44,6 +44,7 @@ if __name__ == "__main__":
     depth_arrays = []
     state_arrays = []
     action_arrays = []
+    traj_weight_arrays = []
     episode_ends_arrays = []
     traj_weight_arrays = []
 
@@ -97,11 +98,10 @@ if __name__ == "__main__":
             # demo_images = data["image"]
             img_arrays.extend(demo_images)
         if has_pointclouds:
-            demo_pointclouds = data["pointcloud"][:-1]
-            # demo_pointclouds = data["pointcloud"]
-            # if i in (9, 50): # HACK idk how this is mismatched???
-            #     demo_pointclouds = demo_pointclouds[:-1]
-            # demo_pointclouds = demo_pointclouds[:-1] # IF CARTESIAN EVERYTHING.
+            demo_pointclouds = data["pointcloud"]
+            if i in (9, 50): # HACK idk how this is mismatched???
+                demo_pointclouds = demo_pointclouds[:-1]
+            demo_pointclouds = demo_pointclouds[:-1] # IF CARTESIAN EVERYTHING.
             point_cloud_arrays.extend(demo_pointclouds)
         
         demo_cart = data["cartesian"]
@@ -113,6 +113,12 @@ if __name__ == "__main__":
         
         action = demo_cart["position"][1:]
         robot_state = demo_cart["position"][:-1]
+        
+        gripper = data['gripper']
+        gripper = np.where(gripper[:] < 0.07, 1, 0)
+        gripper = gripper[1:]
+        
+        print(demo_pointclouds.shape, action.shape, demo_pointclouds.shape[0] == action.shape[0])
 
         gripper = data['gripper']
         gripper = np.where(gripper[:] < 0.07, 1, 0)
@@ -177,10 +183,8 @@ if __name__ == "__main__":
             point_cloud_arrays.shape[1],
             point_cloud_arrays.shape[2],
         )
-
     if has_takeover:
         traj_weight_chunk_size = (100, traj_weight_arrays.shape[1])
-
     # depth_chunk_size = (100, depth_arrays.shape[1], depth_arrays.shape[2])
     if len(action_arrays.shape) == 2:
         action_chunk_size = (100, action_arrays.shape[1])
@@ -208,11 +212,14 @@ if __name__ == "__main__":
             overwrite=True,
             compressor=compressor,
         )
-
     if has_takeover:
-        cprint(
-            f"traj_weight shape: {traj_weight_arrays.shape}, range: [{np.min(traj_weight_arrays)}, {np.max(traj_weight_arrays)}]",
-            "green",
+        zarr_data.create_dataset(
+            "traj_weight",
+            data=traj_weight_arrays,
+            chunks=traj_weight_chunk_size,
+            dtype="float32",
+            overwrite=True,
+            compressor=compressor,
         )
         
     # zarr_data.create_dataset('depth', data=depth_arrays, chunks=depth_chunk_size, dtype='float64', overwrite=True, compressor=compressor)
@@ -252,6 +259,11 @@ if __name__ == "__main__":
     if has_pointclouds:
         cprint(
             f"point_cloud shape: {point_cloud_arrays.shape}, range: [{np.min(point_cloud_arrays)}, {np.max(point_cloud_arrays)}]",
+            "green",
+        )
+    if has_takeover:
+        cprint(
+            f"traj_weight shape: {traj_weight_arrays.shape}, range: [{np.min(traj_weight_arrays)}, {np.max(traj_weight_arrays)}]",
             "green",
         )
     # cprint(f'depth shape: {depth_arrays.shape}, range: [{np.min(depth_arrays)}, {np.max(depth_arrays)}]', 'green')
