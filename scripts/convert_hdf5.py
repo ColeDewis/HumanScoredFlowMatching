@@ -28,8 +28,8 @@ def preproces_image(image):
 if __name__ == "__main__":
     # expert_data_path = "/home/coled/HumanScoredFlowMatching/flow_policy/data/banana_wam"
     # save_data_path = "/home/coled/HumanScoredFlowMatching/flow_policy/data/banana_wam_unwrapped.zarr"
-    expert_data_path = "/home/coled/720/3D-Diffusion-Policy/flow_policy/data/franka_test"
-    save_data_path = "/home/coled/720/3D-Diffusion-Policy/flow_policy/data/franka_test.zarr"
+    expert_data_path = "/home/coled/720/3D-Diffusion-Policy/flow_policy/data/peartabletest60"
+    save_data_path = "/home/coled/720/3D-Diffusion-Policy/flow_policy/data/peartabletest60_cart.zarr"
 
     dirs = os.listdir(expert_data_path)
     dirs = sorted(
@@ -44,6 +44,7 @@ if __name__ == "__main__":
     depth_arrays = []
     state_arrays = []
     action_arrays = []
+    traj_weight_arrays = []
     episode_ends_arrays = []
 
     if os.path.exists(save_data_path):
@@ -67,6 +68,7 @@ if __name__ == "__main__":
     data = data["observations"]
     has_images = "image" in data.keys()
     has_pointclouds = "pointcloud" in data.keys()
+    has_takeover = "takeover" in data.keys()
 
     for i, demo_dir in enumerate(dirs):
         dir_name = os.path.dirname(demo_dir)
@@ -76,23 +78,46 @@ if __name__ == "__main__":
         data = h5py.File(os.path.join(expert_data_path, demo_dir), "r")
         data = data["observations"]
         
+        if has_takeover:
+            takeovers = data["takeover"][:]
+            weights = np.full(takeovers.shape, 0.5)
+            
+
+            for i in range(len(takeovers)):
+                is_start_of_true = takeovers[i] and (i == 0 or not takeovers[i-1])
+                
+                if is_start_of_true:
+                    # last 15 should be assigned 0 weight
+                    start_idx = max(0, i - 15)
+                    weights[start_idx:i] = 0.0
+            
+            traj_weight_arrays.extend(weights)
+        
         if has_images:
             demo_images = data["image"]
             img_arrays.extend(demo_images)
         if has_pointclouds:
             demo_pointclouds = data["pointcloud"]
-            if i == 4: # HACK idk how this is mismatched???
+            if i in (9, 50): # HACK idk how this is mismatched???
                 demo_pointclouds = demo_pointclouds[:-1]
+            demo_pointclouds = demo_pointclouds[:-1] # IF CARTESIAN EVERYTHING.
             point_cloud_arrays.extend(demo_pointclouds)
         
         demo_cart = data["cartesian"]
         demo_joints = data["joints"]
         
-        action = demo_cart["position"]
-        robot_state = demo_joints["position"]
-        gripper = data['gripper']
-        gripper = np.where(gripper[:] < 0.01, 1, 0)
+        # If using joints:
+        # action = demo_cart["position"]
+        # robot_state = demo_joints["position"]
         
+        action = demo_cart["position"][1:]
+        robot_state = demo_cart["position"][:-1]
+        
+        gripper = data['gripper']
+        gripper = np.where(gripper[:] < 0.07, 1, 0)
+        gripper = gripper[1:]
+        
+        print(demo_pointclouds.shape, action.shape, demo_pointclouds.shape[0] == action.shape[0])
 
         
         # NOTE: we maybe should figure out a better angle rep rather than whatever this is..
@@ -120,6 +145,9 @@ if __name__ == "__main__":
             
     if has_pointclouds:
         point_cloud_arrays = np.stack(point_cloud_arrays, axis=0)
+
+    if has_takeover:
+        traj_weight_arrays = np.stack(traj_weight_arrays, axis=0)
     
     action_arrays = np.stack(action_arrays, axis=0)
     state_arrays = np.stack(state_arrays, axis=0)
@@ -140,6 +168,8 @@ if __name__ == "__main__":
             point_cloud_arrays.shape[1],
             point_cloud_arrays.shape[2],
         )
+    if has_takeover:
+        traj_weight_chunk_size = (100, traj_weight_arrays.shape[1])
     # depth_chunk_size = (100, depth_arrays.shape[1], depth_arrays.shape[2])
     if len(action_arrays.shape) == 2:
         action_chunk_size = (100, action_arrays.shape[1])
@@ -164,6 +194,15 @@ if __name__ == "__main__":
             data=point_cloud_arrays,
             chunks=point_cloud_chunk_size,
             dtype="float64",
+            overwrite=True,
+            compressor=compressor,
+        )
+    if has_takeover:
+        zarr_data.create_dataset(
+            "traj_weight",
+            data=traj_weight_arrays,
+            chunks=traj_weight_chunk_size,
+            dtype="float32",
             overwrite=True,
             compressor=compressor,
         )
@@ -205,6 +244,11 @@ if __name__ == "__main__":
     if has_pointclouds:
         cprint(
             f"point_cloud shape: {point_cloud_arrays.shape}, range: [{np.min(point_cloud_arrays)}, {np.max(point_cloud_arrays)}]",
+            "green",
+        )
+    if has_takeover:
+        cprint(
+            f"traj_weight shape: {traj_weight_arrays.shape}, range: [{np.min(traj_weight_arrays)}, {np.max(traj_weight_arrays)}]",
             "green",
         )
     # cprint(f'depth shape: {depth_arrays.shape}, range: [{np.min(depth_arrays)}, {np.max(depth_arrays)}]', 'green')
