@@ -1,5 +1,5 @@
 defaults:
-  - task: franka_test
+  - task: franka_banana_test
 
 name: train_rtc_flowmatch
 
@@ -47,14 +47,14 @@ policy:
   max_delay: 4
 
   # whether to use point cloud's color
-  use_pc_color: false
+  use_pc_color: true
   # type of pointnet
   pointnet_type: "multi_stage_pointnet"
   point_downsample: true
 
   # NOTE: this uses wayy more VRAM than before. Need smaller batch size now.
   pointcloud_encoder_cfg:
-    in_channels: 3
+    in_channels: 6
     out_channels: 128
     use_layernorm: true
     final_norm: layernorm # layernorm, none
@@ -104,7 +104,7 @@ training:
   gradient_accumulate_every: 1
   use_ema: True
   rollout_every: 400
-  checkpoint_every: 100
+  checkpoint_every: 20
   val_every: 100
   sample_every: 5
   max_train_steps: null
@@ -128,8 +128,8 @@ checkpoint:
   topk:
     monitor_key: test_mean_score
     mode: max
-    k: 1
-    format_str: 'epoch={epoch:04d}-test_mean_score={test_mean_score:.3f}.ckpt'
+    k: 15
+    format_str: '${task.task_name}-epoch={epoch:04d}-test_mean_score={test_mean_score:.3f}.ckpt'
   save_last_ckpt: True # this only saves when save_ckpt is True
   save_last_snapshot: False
 
