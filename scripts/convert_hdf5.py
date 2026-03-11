@@ -28,8 +28,8 @@ def preproces_image(image):
 if __name__ == "__main__":
     # expert_data_path = "/home/coled/HumanScoredFlowMatching/flow_policy/data/banana_wam"
     # save_data_path = "/home/coled/HumanScoredFlowMatching/flow_policy/data/banana_wam_unwrapped.zarr"
-    expert_data_path = "/home/coled/720/3D-Diffusion-Policy/flow_policy/data/franka_test"
-    save_data_path = "/home/coled/720/3D-Diffusion-Policy/flow_policy/data/franka_test.zarr"
+    expert_data_path = "/home/serg/projects/HumanScoredFlowMatching/flow_policy/data/banana"
+    save_data_path = "/home/serg/projects/HumanScoredFlowMatching/flow_policy/data/banana.zarr"
 
     dirs = os.listdir(expert_data_path)
     dirs = sorted(
@@ -45,6 +45,7 @@ if __name__ == "__main__":
     state_arrays = []
     action_arrays = []
     episode_ends_arrays = []
+    traj_weight_arrays = []
 
     if os.path.exists(save_data_path):
         cprint("Data already exists at {}".format(save_data_path), "red")
@@ -67,6 +68,7 @@ if __name__ == "__main__":
     data = data["observations"]
     has_images = "image" in data.keys()
     has_pointclouds = "pointcloud" in data.keys()
+    has_takeover = "takeover" in data.keys()
 
     for i, demo_dir in enumerate(dirs):
         dir_name = os.path.dirname(demo_dir)
@@ -75,35 +77,67 @@ if __name__ == "__main__":
         
         data = h5py.File(os.path.join(expert_data_path, demo_dir), "r")
         data = data["observations"]
-        
+
+        if has_takeover:
+            takeovers = data["takeover"][:]
+            weights = np.full(takeovers.shape, 0.5)
+            for i in range(len(takeovers)):
+                is_start_of_true = takeovers[i] and (i == 0 or not takeovers[i-1])
+                
+                if is_start_of_true:
+                    # last 15 should be assigned 0 weight
+                    start_idx = max(0, i - 15)
+                    weights[start_idx:i] = 0.0
+            
+            traj_weight_arrays.extend(weights)
+
         if has_images:
-            demo_images = data["image"]
+            # BUG
+            demo_images = data["image"][:-1]
+            # demo_images = data["image"]
             img_arrays.extend(demo_images)
         if has_pointclouds:
-            demo_pointclouds = data["pointcloud"]
-            if i == 4: # HACK idk how this is mismatched???
-                demo_pointclouds = demo_pointclouds[:-1]
+            demo_pointclouds = data["pointcloud"][:-1]
+            # demo_pointclouds = data["pointcloud"]
+            # if i in (9, 50): # HACK idk how this is mismatched???
+            #     demo_pointclouds = demo_pointclouds[:-1]
+            # demo_pointclouds = demo_pointclouds[:-1] # IF CARTESIAN EVERYTHING.
             point_cloud_arrays.extend(demo_pointclouds)
         
         demo_cart = data["cartesian"]
         demo_joints = data["joints"]
         
-        action = demo_cart["position"]
-        robot_state = demo_joints["position"]
-        gripper = data['gripper']
-        gripper = np.where(gripper[:] < 0.01, 1, 0)
+        # If using joints:
+        # action = demo_cart["position"]
+        # robot_state = demo_joints["position"]
         
+        action = demo_cart["position"][1:]
+        robot_state = demo_cart["position"][:-1]
 
+        gripper = data['gripper']
+        gripper = np.where(gripper[:] < 0.07, 1, 0)
         
+        gripper_curr = gripper[1:]
+        gripper_pred = gripper[:-1]
+         
+
         # NOTE: we maybe should figure out a better angle rep rather than whatever this is..
         rotations = action[:, 3:6]
         unwrapped_rotations = np.unwrap(rotations, axis=0)
-        action = np.concatenate([action[:, :3], unwrapped_rotations, gripper], axis=-1)
+        action = np.concatenate([action[:, :3], unwrapped_rotations, gripper_curr], axis=-1)
+
+        rotations = robot_state[:, 3:6]
+        unwrapped_rotations = np.unwrap(rotations, axis=0)
+        robot_state = np.concatenate([robot_state[:, :3], unwrapped_rotations, gripper_pred], axis=-1)
 
         action_arrays.extend(action)
         state_arrays.extend(robot_state)
         
         episode_len = robot_state.shape[0]
+        print(action.shape)
+        print(robot_state.shape)
+        print(data["image"].shape)
+        print(data["pointcloud"].shape)
         
         episode_ends_arrays.append(total_count + episode_len)
         total_count += episode_len        
@@ -120,6 +154,9 @@ if __name__ == "__main__":
             
     if has_pointclouds:
         point_cloud_arrays = np.stack(point_cloud_arrays, axis=0)
+
+    if has_takeover:
+        traj_weight_arrays = np.stack(traj_weight_arrays, axis=0)
     
     action_arrays = np.stack(action_arrays, axis=0)
     state_arrays = np.stack(state_arrays, axis=0)
@@ -140,6 +177,10 @@ if __name__ == "__main__":
             point_cloud_arrays.shape[1],
             point_cloud_arrays.shape[2],
         )
+
+    if has_takeover:
+        traj_weight_chunk_size = (100, traj_weight_arrays.shape[1])
+
     # depth_chunk_size = (100, depth_arrays.shape[1], depth_arrays.shape[2])
     if len(action_arrays.shape) == 2:
         action_chunk_size = (100, action_arrays.shape[1])
@@ -166,6 +207,12 @@ if __name__ == "__main__":
             dtype="float64",
             overwrite=True,
             compressor=compressor,
+        )
+
+    if has_takeover:
+        cprint(
+            f"traj_weight shape: {traj_weight_arrays.shape}, range: [{np.min(traj_weight_arrays)}, {np.max(traj_weight_arrays)}]",
+            "green",
         )
         
     # zarr_data.create_dataset('depth', data=depth_arrays, chunks=depth_chunk_size, dtype='float64', overwrite=True, compressor=compressor)

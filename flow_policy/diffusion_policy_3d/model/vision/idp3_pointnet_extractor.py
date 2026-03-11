@@ -124,7 +124,7 @@ class iDP3Encoder(nn.Module):
             from .multi_stage_pointnet import MultiStagePointNetEncoder
 
             self.extractor = MultiStagePointNetEncoder(
-                out_channels=pointcloud_encoder_cfg.out_channels
+                in_c=pointcloud_encoder_cfg.in_channels, out_channels=pointcloud_encoder_cfg.out_channels
             )
         else:
             raise NotImplementedError(f"pointnet_type: {pointnet_type}")
