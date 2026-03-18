@@ -23,6 +23,7 @@ import time
 
 import dill
 import hydra
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import tqdm
@@ -38,7 +39,6 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import OmegaConf
 from termcolor import cprint
 from torch.utils.data import DataLoader
-import matplotlib.pyplot as plt
 
 OmegaConf.register_new_resolver("eval", eval, replace=True)
 
@@ -98,11 +98,15 @@ class TrainDP3Workspace:
         RUN_VALIDATION = False # reduce time cost
         
         # resume training
-        if cfg.training.resume:
-            lastest_ckpt_path = self.get_checkpoint_path()
-            if lastest_ckpt_path.is_file():
-                print(f"Resuming from checkpoint {lastest_ckpt_path}")
-                self.load_checkpoint(path=lastest_ckpt_path)
+        lastest_ckpt_path = self.get_checkpoint_path()
+        
+        if getattr(cfg.training, 'resume', False) and lastest_ckpt_path.is_file():
+            cprint(f"Resuming training run from local checkpoint {lastest_ckpt_path}", "green")
+            self.load_checkpoint(path=lastest_ckpt_path)
+        elif getattr(cfg.training, 'sirius_finetune', False):
+            # Load the checkpoint but NOT previous optimizer to tune with sirius.
+            pretrained_ckpt_path = pathlib.Path(cfg.training.finetune_checkpoint_path)
+            self.load_checkpoint(path=pretrained_ckpt_path, include_keys=[], exclude_keys=["optimizer"])
 
         # configure dataset
         dataset: BaseDataset
@@ -520,6 +524,8 @@ class TrainDP3Workspace:
             exclude_keys = tuple()
         if include_keys is None:
             include_keys = payload['pickles'].keys()
+            # cprint(f"KEYS LOADED BY DEFAULT: {include_keys}", "green")
+            # cprint(f"PAYLOAD ITEMS: {payload.keys()} {payload['state_dicts'].keys()}", "green")
 
         for key, value in payload['state_dicts'].items():
             if key not in exclude_keys:

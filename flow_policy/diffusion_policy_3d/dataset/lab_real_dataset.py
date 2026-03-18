@@ -7,17 +7,11 @@ import numpy as np
 import torch
 from diffusion_policy_3d.common.pytorch_util import dict_apply
 from diffusion_policy_3d.common.replay_buffer import ReplayBuffer
-from diffusion_policy_3d.common.sampler import (
-    SequenceSampler,
-    downsample_mask,
-    get_val_mask,
-)
+from diffusion_policy_3d.common.sampler import (SequenceSampler,
+                                                downsample_mask, get_val_mask)
 from diffusion_policy_3d.dataset.base_dataset import BaseDataset
 from diffusion_policy_3d.model.common.normalizer import (
-    LinearNormalizer,
-    SingleFieldLinearNormalizer,
-    StringNormalizer,
-)
+    LinearNormalizer, SingleFieldLinearNormalizer, StringNormalizer)
 from termcolor import cprint
 
 
@@ -34,6 +28,7 @@ class LabRealDataset(BaseDataset):
         task_name=None,
         has_images=False,
         has_pointclouds=True,
+        weighted=False,
         num_points=4096,
     ):
         super().__init__()
@@ -43,6 +38,7 @@ class LabRealDataset(BaseDataset):
         self.has_images = has_images
         self.has_pointclouds = has_pointclouds
         self.num_points = num_points
+        self.weighted = weighted
 
         buffer_keys = [
             "state",
@@ -53,6 +49,8 @@ class LabRealDataset(BaseDataset):
             buffer_keys.append("point_cloud")
         if self.has_images:
             buffer_keys.append("img")
+        if self.weighted:
+            buffer_keys.append("traj_weight")
 
         self.replay_buffer = ReplayBuffer.copy_from_path(zarr_path, keys=buffer_keys)
 
@@ -94,6 +92,9 @@ class LabRealDataset(BaseDataset):
 
         if self.has_pointclouds:
             normalizer["point_cloud"] = SingleFieldLinearNormalizer.create_identity()
+            
+        if self.weighted:
+            normalizer["weights"] = SingleFieldLinearNormalizer.create_identity()
 
         # TODO: Not sure what normalizer to use for images. The default linear might be fine?
         # But I think typically they just 0-1 normalize it. Once we are training with images, then 
@@ -124,6 +125,10 @@ class LabRealDataset(BaseDataset):
             # in convert data or something?
             img = sample["img"][:,].astype(np.float32)  # (T, C, H, W)
             data["obs"]["img"] = img
+            
+        if self.weighted:
+            weights = sample['traj_weight'][:,].astype(np.float32)
+            data["weights"] = weights
 
         return data
 

@@ -28,8 +28,10 @@ def preproces_image(image):
 if __name__ == "__main__":
     # expert_data_path = "/home/coled/HumanScoredFlowMatching/flow_policy/data/banana_wam"
     # save_data_path = "/home/coled/HumanScoredFlowMatching/flow_policy/data/banana_wam_unwrapped.zarr"
-    expert_data_path = "/home/coled/720/3D-Diffusion-Policy/flow_policy/data/peartabletest60"
-    save_data_path = "/home/coled/720/3D-Diffusion-Policy/flow_policy/data/peartabletest60_cart.zarr"
+    # expert_data_path = "/home/coled/720/3D-Diffusion-Policy/flow_policy/data/peartabletest60"
+    # save_data_path = "/home/coled/720/3D-Diffusion-Policy/flow_policy/data/peartabletest60_cart.zarr"
+    expert_data_path = "/home/coled/720/3D-Diffusion-Policy/flow_policy/data_sirius/banana_finetune"
+    save_data_path = "/home/coled/720/3D-Diffusion-Policy/flow_policy/data_sirius/banana_finetune.zarr"
 
     dirs = os.listdir(expert_data_path)
     dirs = sorted(
@@ -46,7 +48,8 @@ if __name__ == "__main__":
     action_arrays = []
     traj_weight_arrays = []
     episode_ends_arrays = []
-    traj_weight_arrays = []
+    # traj_weight_arrays = []
+    takeover_arrays = []
 
     if os.path.exists(save_data_path):
         cprint("Data already exists at {}".format(save_data_path), "red")
@@ -71,6 +74,8 @@ if __name__ == "__main__":
     has_pointclouds = "pointcloud" in data.keys()
     has_takeover = "takeover" in data.keys()
 
+    takeover_combined = []
+
     for i, demo_dir in enumerate(dirs):
         dir_name = os.path.dirname(demo_dir)
 
@@ -78,19 +83,10 @@ if __name__ == "__main__":
         
         data = h5py.File(os.path.join(expert_data_path, demo_dir), "r")
         data = data["observations"]
-
+        
         if has_takeover:
-            takeovers = data["takeover"][:]
-            weights = np.full(takeovers.shape, 0.5)
-            for i in range(len(takeovers)):
-                is_start_of_true = takeovers[i] and (i == 0 or not takeovers[i-1])
-                
-                if is_start_of_true:
-                    # last 15 should be assigned 0 weight
-                    start_idx = max(0, i - 15)
-                    weights[start_idx:i] = 0.0
-            
-            traj_weight_arrays.extend(weights)
+            # for cartesian we need to cut off the last takeover.
+            takeover_combined.append(data["takeover"][:-1])
 
         if has_images:
             # BUG
@@ -99,8 +95,8 @@ if __name__ == "__main__":
             img_arrays.extend(demo_images)
         if has_pointclouds:
             demo_pointclouds = data["pointcloud"]
-            if i in (9, 50): # HACK idk how this is mismatched???
-                demo_pointclouds = demo_pointclouds[:-1]
+            # if i in (9, 50): # HACK idk how this is mismatched???
+            #     demo_pointclouds = demo_pointclouds[:-1]
             demo_pointclouds = demo_pointclouds[:-1] # IF CARTESIAN EVERYTHING.
             point_cloud_arrays.extend(demo_pointclouds)
         
@@ -140,13 +136,39 @@ if __name__ == "__main__":
         state_arrays.extend(robot_state)
         
         episode_len = robot_state.shape[0]
-        print(action.shape)
-        print(robot_state.shape)
-        print(data["image"].shape)
-        print(data["pointcloud"].shape)
+        # print(action.shape)
+        # print(robot_state.shape)
+        # print(data["image"].shape)
+        # print(data["pointcloud"].shape)
         
         episode_ends_arrays.append(total_count + episode_len)
         total_count += episode_len        
+
+    if has_takeover:
+        takeover_combined = np.concatenate(takeover_combined)
+        # weights = np.full(takeovers.shape, 0.5)
+        # WEIGHT ALLOCATION
+        # Since we have corrections << demonstrations, we just give all possible weight
+        # to takeovers from the robot actions and the pre-interventions.
+        # IMPORTANTLY, WE HAVE TO DO THIS OVER ALL TRAJECTORIES TOTAL..
+        # weights = np.zeros_like(takeover_combined, dtype=np.float32)
+        # if np.sum(takeover_combined) > 0:
+        #     weights[takeover_combined == 1] = takeover_combined.size / np.sum(takeover_combined)
+        # for i in range(len(takeovers)):
+        #     is_start_of_true = takeovers[i] and (i == 0 or not takeovers[i-1])
+            
+        #     if is_start_of_true:
+        #         # last 15 should be assigned 0 weight
+        #         start_idx = max(0, i - 15)
+        #         weights[start_idx:i] = 0.0
+        
+        # traj_weight_arrays = weights
+        takeover_arrays = takeover_combined[:, 0]
+    else:
+        # 1 weight for everything else
+        # traj_weight_arrays = np.ones(total_count, dtype=np.float32)
+        takeover_arrays = np.full(total_count, False)
+
 
     # create zarr file
     zarr_root = zarr.group(save_data_path)
@@ -160,9 +182,6 @@ if __name__ == "__main__":
             
     if has_pointclouds:
         point_cloud_arrays = np.stack(point_cloud_arrays, axis=0)
-
-    if has_takeover:
-        traj_weight_arrays = np.stack(traj_weight_arrays, axis=0)
     
     action_arrays = np.stack(action_arrays, axis=0)
     state_arrays = np.stack(state_arrays, axis=0)
@@ -183,8 +202,9 @@ if __name__ == "__main__":
             point_cloud_arrays.shape[1],
             point_cloud_arrays.shape[2],
         )
-    if has_takeover:
-        traj_weight_chunk_size = (100, traj_weight_arrays.shape[1])
+    
+    takeover_chunk_size = (100,)
+        
     # depth_chunk_size = (100, depth_arrays.shape[1], depth_arrays.shape[2])
     if len(action_arrays.shape) == 2:
         action_chunk_size = (100, action_arrays.shape[1])
@@ -212,15 +232,22 @@ if __name__ == "__main__":
             overwrite=True,
             compressor=compressor,
         )
-    if has_takeover:
-        zarr_data.create_dataset(
-            "traj_weight",
-            data=traj_weight_arrays,
-            chunks=traj_weight_chunk_size,
-            dtype="float32",
-            overwrite=True,
-            compressor=compressor,
-        )
+    # zarr_data.create_dataset(
+    #     "traj_weight",
+    #     data=traj_weight_arrays,
+    #     chunks=traj_weight_chunk_size,
+    #     dtype="float32",
+    #     overwrite=True,
+    #     compressor=compressor,
+    # )
+    zarr_data.create_dataset(
+        "takeovers",
+        data=takeover_arrays,
+        chunks=takeover_chunk_size,
+        dtype="float32",
+        overwrite=True,
+        compressor=compressor
+    )
         
     # zarr_data.create_dataset('depth', data=depth_arrays, chunks=depth_chunk_size, dtype='float64', overwrite=True, compressor=compressor)
     zarr_data.create_dataset(
@@ -261,11 +288,15 @@ if __name__ == "__main__":
             f"point_cloud shape: {point_cloud_arrays.shape}, range: [{np.min(point_cloud_arrays)}, {np.max(point_cloud_arrays)}]",
             "green",
         )
-    if has_takeover:
-        cprint(
-            f"traj_weight shape: {traj_weight_arrays.shape}, range: [{np.min(traj_weight_arrays)}, {np.max(traj_weight_arrays)}]",
+    # cprint(
+    #     f"traj_weight shape: {traj_weight_arrays.shape}, range: [{np.min(traj_weight_arrays)}, {np.max(traj_weight_arrays)}]",
+    #     "green",
+    # )
+    cprint(
+        f"takeover shape: {takeover_arrays.shape}, range: [{np.min(takeover_arrays)}, {np.max(takeover_arrays)}]",
             "green",
-        )
+    )
+        
     # cprint(f'depth shape: {depth_arrays.shape}, range: [{np.min(depth_arrays)}, {np.max(depth_arrays)}]', 'green')
     cprint(
         f"action shape: {action_arrays.shape}, range: [{np.min(action_arrays)}, {np.max(action_arrays)}]",

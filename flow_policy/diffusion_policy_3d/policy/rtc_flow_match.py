@@ -434,13 +434,16 @@ class RTCFlowMatching(BasePolicy):
 
         loss = F.mse_loss(pred, target, reduction="none")
 
+        loss = loss * loss_mask.type(loss.dtype)
+        
         if self.weighted_loss:
             weights = batch["weights"].unsqueeze(-1)
             loss = weights * loss
-
-        loss = loss * loss_mask.type(loss.dtype)
-        loss = reduce(loss, "b ... -> b (...)", "mean")
-        loss = loss.mean()
+        
+        # loss = reduce(loss, "b ... -> b (...)", "mean")
+        # loss = loss.mean()
+        valid_elements_count = loss_mask.sum().clamp_min(1.0)
+        loss = loss.sum() / valid_elements_count
 
         loss_dict = {
             "bc_loss": loss.item(),
