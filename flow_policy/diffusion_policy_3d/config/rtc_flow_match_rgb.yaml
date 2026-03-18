@@ -1,0 +1,169 @@
+defaults:
+  - task: franka_banana
+
+name: train_rtc_flowmatch
+
+
+task_name: ${task.name}
+shape_meta: ${task.shape_meta}
+exp_name: "debug"
+
+# horizon: 4
+horizon: 16
+n_obs_steps: 2
+# n_action_steps: 3
+n_action_steps: 8
+n_latency_steps: 0
+dataset_obs_steps: ${n_obs_steps}
+keypoint_visible_rate: 1.0
+obs_as_global_cond: True
+
+policy:
+  _target_: diffusion_policy_3d.policy.rtc_flow_match_rgb.RTCFlowMatchingRGB
+  use_point_crop: true
+  condition_type: film
+  use_down_condition: true
+  use_mid_condition: true
+  use_up_condition: true
+  weighted_loss: false
+  
+  diffusion_step_embed_dim: 128
+  down_dims:
+  - 128
+  - 256
+  - 384
+  crop_shape:
+  - 80
+  - 80
+  horizon: ${horizon}
+  kernel_size: 5
+  n_action_steps: ${n_action_steps}
+  n_groups: 8
+  n_obs_steps: ${n_obs_steps}
+
+  num_inference_steps: 10
+  obs_as_global_cond: true
+  shape_meta: ${shape_meta}
+
+  max_delay: 4
+
+  use_depth: False
+  use_depth_only: False
+  obs_encoder:
+    _target_: diffusion_policy_3d.model.vision.timm_obs_encoder.TimmObsEncoder
+    shape_meta: ${shape_meta}
+
+    model_name: 'r3m'
+    pretrained: True
+    frozen: False
+
+    global_pool: ''
+
+    feature_aggregation: null
+    position_encording: 'sinusoidal' # 'learnable' or 'sinusoidal'. it only works for transformer
+
+    downsample_ratio: 32
+
+    transforms:
+      - type: RandomCrop
+        ratio: 0.95
+      - _target_: torchvision.transforms.RandomRotation
+        degrees:
+          - -5.0
+          - 5.0
+        expand: false
+      - _target_: torchvision.transforms.ColorJitter
+        brightness: 0.3
+        contrast: 0.4
+        saturation: 0.5
+        hue: 0.08
+     
+
+    use_group_norm: True
+    share_rgb_model: False
+    imagenet_norm: True
+
+
+ema:
+  _target_: diffusion_policy_3d.model.diffusion.ema_model.EMAModel
+  update_after_step: 0
+  inv_gamma: 1.0
+  power: 0.75
+  min_value: 0.0
+  max_value: 0.9999
+
+dataloader:
+  # batch_size: 120
+  batch_size: 64
+  num_workers: 8
+  shuffle: True
+  pin_memory: True
+  persistent_workers: False
+
+val_dataloader:
+  # batch_size: 120
+  batch_size: 64
+  num_workers: 8
+  shuffle: False
+  pin_memory: True
+  persistent_workers: False
+
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 1.0e-4
+  betas: [0.95, 0.999]
+  eps: 1.0e-8
+  weight_decay: 1.0e-6
+
+training:
+  device: "cuda:0"
+  seed: 42
+  debug: False
+  resume: True
+  lr_scheduler: cosine
+  lr_warmup_steps: 500
+  num_epochs: 301
+  gradient_accumulate_every: 1
+  use_ema: True
+  rollout_every: 400
+  checkpoint_every: 20
+  val_every: 100
+  sample_every: 5
+  max_train_steps: null
+  max_val_steps: null
+  tqdm_interval_sec: 1.0
+  save_video: True
+
+logging:
+  group: ${exp_name}
+  id: null
+  mode: online
+  name: rtc_flow_match-${task.name}-${training.seed}
+  project: dp3-flow
+  resume: true
+  tags:
+  - dp3-flow
+
+
+checkpoint:
+  save_ckpt: True # if True, save checkpoint every checkpoint_every
+  topk:
+    monitor_key: test_mean_score
+    mode: max
+    k: 15
+    format_str: '${task.task_name}-epoch={epoch:04d}-test_mean_score={test_mean_score:.3f}.ckpt'
+  save_last_ckpt: True # this only saves when save_ckpt is True
+  save_last_snapshot: False
+
+multi_run:
+  run_dir: data/outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}
+  wandb_name_base: ${now:%Y.%m.%d-%H.%M.%S}_${name}_${task_name}
+
+hydra:
+  job:
+    override_dirname: ${name}
+  run:
+    dir: data/outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}
+  sweep:
+    dir: data/outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}
+    subdir: ${hydra.job.num}

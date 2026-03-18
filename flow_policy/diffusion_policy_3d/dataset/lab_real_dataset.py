@@ -93,12 +93,11 @@ class LabRealDataset(BaseDataset):
         if self.has_pointclouds:
             normalizer["point_cloud"] = SingleFieldLinearNormalizer.create_identity()
             
+        if self.has_images:
+            normalizer["img"] = SingleFieldLinearNormalizer.create_identity()
+            
         if self.weighted:
             normalizer["weights"] = SingleFieldLinearNormalizer.create_identity()
-
-        # TODO: Not sure what normalizer to use for images. The default linear might be fine?
-        # But I think typically they just 0-1 normalize it. Once we are training with images, then 
-        # will need to come back and decide.
 
         return normalizer
 
@@ -121,9 +120,8 @@ class LabRealDataset(BaseDataset):
             data["obs"]["point_cloud"] = point_cloud
         
         if self.has_images:
-            # TODO may need to add preprocessing logic here also. Likely just the function
-            # in convert data or something?
-            img = sample["img"][:,].astype(np.float32)  # (T, C, H, W)
+            img = sample["img"][:,].astype(np.float32)  # (T, H, W, C)
+            img = np.transpose(img, (0, 3, 1, 2))  # Reshape to (T, C, H, W)
             data["obs"]["img"] = img
             
         if self.weighted:
