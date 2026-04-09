@@ -438,6 +438,7 @@ class RTCFlowMatching(BasePolicy):
         
         if self.weighted_loss:
             weights = batch["weights"].unsqueeze(-1)
+            # weights[weights != 0] = 1.0
             loss = weights * loss
         
         # loss = reduce(loss, "b ... -> b (...)", "mean")

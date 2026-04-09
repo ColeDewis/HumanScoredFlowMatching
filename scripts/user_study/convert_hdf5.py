@@ -1,3 +1,4 @@
+import argparse
 import os
 import pickle
 import re
@@ -26,12 +27,23 @@ def preproces_image(image):
 
 
 if __name__ == "__main__":
-    # expert_data_path = "/home/coled/HumanScoredFlowMatching/flow_policy/data/banana_wam"
-    # save_data_path = "/home/coled/HumanScoredFlowMatching/flow_policy/data/banana_wam_unwrapped.zarr"
-    # expert_data_path = "/home/coled/720/3D-Diffusion-Policy/flow_policy/data/peartabletest60"
-    # save_data_path = "/home/coled/720/3D-Diffusion-Policy/flow_policy/data/peartabletest60_cart.zarr"
-    expert_data_path = "/home/coled/720/3D-Diffusion-Policy/flow_policy/data_sirius/cole_banana_redo"
-    save_data_path = "/home/coled/720/3D-Diffusion-Policy/flow_policy/data_sirius/cole_banana_redo.zarr"
+    parser = argparse.ArgumentParser(description="Convert a user's h5's to zarr for training.")
+    parser.add_argument("--user", type=str, required=True, help="Identifier for the user who collected the data (e.g., coled_01)")
+    parser.add_argument("--round", type=int, required=True, help="Round 1 or 2")
+    
+    parser.add_argument("--multiple", action='store_true', help="Set for multiple intervention protocol")
+    
+    args = parser.parse_args()
+    user_id = args.user
+    round = args.round
+    multiple = args.multiple
+
+    protocol_folder = "multiple" if multiple else "single"
+    
+    assert round in (1, 2), "Round must be 1 or 2"
+
+    expert_data_path = f"/home/coled/720/3D-Diffusion-Policy/flow_policy/data_sirius/user_study/{user_id}/{protocol_folder}/round{round}"
+    save_data_path = f"/home/coled/720/3D-Diffusion-Policy/flow_policy/data_sirius/user_study/{user_id}/{protocol_folder}/round{round}.zarr"
 
     dirs = os.listdir(expert_data_path)
     dirs = sorted(
@@ -92,10 +104,12 @@ if __name__ == "__main__":
             # BUG
             demo_images = data["image"][:-1]
             # demo_images = data["image"]
+            # if i == 0: # HACK idk how this is mismatched???
+            #     demo_images = demo_images[:-1]
             img_arrays.extend(demo_images)
         if has_pointclouds:
             demo_pointclouds = data["pointcloud"]
-            # if i in (9, 50): # HACK idk how this is mismatched???
+            # if i == 0: # HACK idk how this is mismatched???
             #     demo_pointclouds = demo_pointclouds[:-1]
             demo_pointclouds = demo_pointclouds[:-1] # IF CARTESIAN EVERYTHING.
             point_cloud_arrays.extend(demo_pointclouds)

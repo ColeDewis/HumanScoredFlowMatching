@@ -1,6 +1,6 @@
 name: franka_banana_rgb
 
-task_name: franka_banana_rgb_50
+task_name: franka_banana_rgb
 
 shape_meta: &shape_meta
   # acceptable types: rgb, low_dim
@@ -21,7 +21,7 @@ env_runner: null
 
 dataset:
   _target_: diffusion_policy_3d.dataset.lab_real_dataset.LabRealDataset
-  zarr_path: data_sirius/cole_banana_redo.zarr
+  zarr_path: data_sirius/combined_banana.zarr
   horizon: ${horizon}
   pad_before: ${eval:'${n_obs_steps}-1'}
   pad_after: ${eval:'${n_action_steps}-1'}
@@ -30,3 +30,4 @@ dataset:
   max_train_episodes: 90
   has_images: True
   has_pointclouds: False
+  weighted: True

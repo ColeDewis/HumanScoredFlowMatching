@@ -19,13 +19,12 @@ keypoint_visible_rate: 1.0
 obs_as_global_cond: True
 
 policy:
-  _target_: diffusion_policy_3d.policy.rtc_flow_match.RTCFlowMatching
+  _target_: diffusion_policy_3d.policy.rtc_flow_match_rgb.RTCFlowMatchingRGB
   use_point_crop: true
   condition_type: film
   use_down_condition: true
   use_mid_condition: true
   use_up_condition: true
-  # weighted_loss: false
   weighted_loss: true
   
   diffusion_step_embed_dim: 128
@@ -48,20 +47,41 @@ policy:
 
   max_delay: 4
 
-  # whether to use point cloud's color
-  use_pc_color: true
-  # type of pointnet
-  pointnet_type: "multi_stage_pointnet"
-  point_downsample: true
+  use_depth: False
+  use_depth_only: False
+  obs_encoder:
+    _target_: diffusion_policy_3d.model.vision.timm_obs_encoder.TimmObsEncoder
+    shape_meta: ${shape_meta}
 
-  # NOTE: this uses wayy more VRAM than before. Need smaller batch size now.
-  pointcloud_encoder_cfg:
-    in_channels: 6
-    out_channels: 128
-    use_layernorm: true
-    final_norm: layernorm # layernorm, none
-    normal_channel: false
-    num_points: 4096
+    model_name: 'r3m'
+    pretrained: True
+    frozen: False
+
+    global_pool: ''
+
+    feature_aggregation: null
+    position_encording: 'sinusoidal' # 'learnable' or 'sinusoidal'. it only works for transformer
+
+    downsample_ratio: 32
+
+    transforms:
+      - type: RandomCrop
+        ratio: 0.95
+      - _target_: torchvision.transforms.RandomRotation
+        degrees:
+          - -5.0
+          - 5.0
+        expand: false
+      - _target_: torchvision.transforms.ColorJitter
+        brightness: 0.3
+        contrast: 0.4
+        saturation: 0.5
+        hue: 0.08
+     
+
+    use_group_norm: True
+    share_rgb_model: False
+    imagenet_norm: True
 
 
 ema:
