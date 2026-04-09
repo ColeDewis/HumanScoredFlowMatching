@@ -177,6 +177,84 @@ class SingleFieldLinearNormalizer(DictOfTensorMixin):
     def __call__(self, x: Union[torch.Tensor, np.ndarray]) -> torch.Tensor:
         return self.normalize(x)
 
+class StringNormalizer(DictOfTensorMixin):
+    avaliable_modes = ['limits', 'gaussian']
+    
+    @torch.no_grad()
+    def fit(self,
+            data: Union[torch.Tensor, np.ndarray, zarr.Array],
+            last_n_dims=1,
+            dtype=torch.float32,
+            mode='limits',
+            output_max=1.,
+            output_min=-1.,
+            range_eps=1e-4,
+            fit_offset=True):
+        self.params_dict = _fit(data, 
+            last_n_dims=last_n_dims,
+            dtype=dtype,
+            mode=mode,
+            output_max=output_max,
+            output_min=output_min,
+            range_eps=range_eps,
+            fit_offset=fit_offset)
+    
+    @classmethod
+    def create_fit(cls, data: Union[torch.Tensor, np.ndarray, zarr.Array], **kwargs):
+        obj = cls()
+        obj.fit(data, **kwargs)
+        return obj
+    
+    @classmethod
+    def create_manual(cls, 
+            scale: Union[torch.Tensor, np.ndarray], 
+            offset: Union[torch.Tensor, np.ndarray],
+            input_stats_dict: Dict[str, Union[torch.Tensor, np.ndarray]]):
+        def to_tensor(x):
+            if not isinstance(x, torch.Tensor):
+                x = torch.from_numpy(x)
+            x = x.flatten()
+            return x
+        
+        # check
+        for x in [offset] + list(input_stats_dict.values()):
+            assert x.shape == scale.shape
+            assert x.dtype == scale.dtype
+        
+        params_dict = nn.ParameterDict({
+            'scale': to_tensor(scale),
+            'offset': to_tensor(offset),
+            'input_stats': nn.ParameterDict(
+                dict_apply(input_stats_dict, to_tensor))
+        })
+        return cls(params_dict)
+
+    @classmethod
+    def create_identity(cls, dtype=torch.float32):
+        scale = torch.tensor([1], dtype=dtype)
+        offset = torch.tensor([0], dtype=dtype)
+        input_stats_dict = {
+            'min': torch.tensor([-1], dtype=dtype),
+            'max': torch.tensor([1], dtype=dtype),
+            'mean': torch.tensor([0], dtype=dtype),
+            'std': torch.tensor([1], dtype=dtype)
+        }
+        return cls.create_manual(scale, offset, input_stats_dict)
+
+    def normalize(self, x):
+        return x
+
+    def unnormalize(self, x):
+        return x
+
+    def get_input_stats(self):
+        return self.params_dict['input_stats']
+
+    def get_output_stats(self):
+        return dict_apply(self.params_dict['input_stats'], self.normalize)
+
+    def __call__(self, x):
+        return self.normalize(x)
 
 
 def _fit(data: Union[torch.Tensor, np.ndarray, zarr.Array],

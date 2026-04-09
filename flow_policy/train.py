@@ -23,6 +23,7 @@ import time
 
 import dill
 import hydra
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import tqdm
@@ -97,11 +98,15 @@ class TrainDP3Workspace:
         RUN_VALIDATION = False # reduce time cost
         
         # resume training
-        if cfg.training.resume:
-            lastest_ckpt_path = self.get_checkpoint_path()
-            if lastest_ckpt_path.is_file():
-                print(f"Resuming from checkpoint {lastest_ckpt_path}")
-                self.load_checkpoint(path=lastest_ckpt_path)
+        lastest_ckpt_path = self.get_checkpoint_path()
+        
+        if getattr(cfg.training, 'resume', False) and lastest_ckpt_path.is_file():
+            cprint(f"Resuming training run from local checkpoint {lastest_ckpt_path}", "green")
+            self.load_checkpoint(path=lastest_ckpt_path)
+        elif getattr(cfg.training, 'sirius_finetune', False):
+            # Load the checkpoint but NOT previous optimizer to tune with sirius.
+            pretrained_ckpt_path = pathlib.Path(cfg.training.finetune_checkpoint_path)
+            self.load_checkpoint(path=pretrained_ckpt_path, include_keys=[], exclude_keys=["optimizer"])
 
         # configure dataset
         dataset: BaseDataset
@@ -295,10 +300,82 @@ class TrainDP3Workspace:
                     obs_dict = batch['obs']
                     gt_action = batch['action']
                     
-                    result = policy.predict_action(obs_dict)
+                    # For RTC specifically, condition on some past actions.
+                    if hasattr(policy, 'max_delay') and policy.max_delay >= 2:
+                        val_delay = torch.randint(1, policy.max_delay + 1, (1,)).item()
+                        
+                        # Slice the ground truth to create "past actions" to condition inference on
+                        # Shape: (B, val_delay, Action_Dim)
+                        past_actions_input = gt_action[:, :val_delay, :]
+                        result = policy.predict_action(obs_dict, past_actions=past_actions_input)
+                        
+                        pred_action = result['action_pred']
+                        # extra debugging metrics for RTC
+                        # Did the model actually overwrite the prefix? Should be ~0.0
+                        history_mse = torch.nn.functional.mse_loss(
+                            pred_action[:, :val_delay], 
+                            past_actions_input
+                        )
+                        step_log['train_cond_fidelity'] = history_mse.item()
+
+                        # Trying to measure Boundary Smoothness 
+                        # We measure the change in velocity across the boundary (indices: d-2, d-1, d)
+                        # v_in: Velocity of the last step of history
+                        v_in = pred_action[:, val_delay-1] - pred_action[:, val_delay-2]
+                        
+                        # v_out: Velocity of the first predicted step
+                        v_out = pred_action[:, val_delay] - pred_action[:, val_delay-1]
+
+                        boundary_jerk = torch.nn.functional.mse_loss(v_out, v_in)
+                        step_log['train_boundary_smoothness'] = boundary_jerk.item()
+                        
+                    else:
+                        val_delay = 0
+                        result = policy.predict_action(obs_dict)
+                        
                     pred_action = result['action_pred']
                     mse = torch.nn.functional.mse_loss(pred_action, gt_action)
                     step_log['train_action_mse_error'] = mse.item()
+                    
+                    
+                    # TODO: add a config flag on whether we do this plotting,
+                    # since I have a feeling it might be slow..
+                    gt_np = gt_action[0].detach().cpu().numpy()
+                    pred_np = pred_action[0].detach().cpu().numpy()
+                    
+                    # 2. Setup Plot (Limit to 6 dimensions to keep it readable)
+                    n_dims = gt_np.shape[-1]
+                    n_plots = min(n_dims, 6)
+                    
+                    fig, axes = plt.subplots(n_plots, 1, figsize=(10, 2 * n_plots), sharex=True)
+                    if n_plots == 1: axes = [axes] # Handle single dim case
+
+                    for d in range(n_plots):
+                        ax = axes[d]
+                        # Plot Ground Truth (Black Solid)
+                        ax.plot(gt_np[:, d], label='Ground Truth', color='black', alpha=0.6, linewidth=2)
+                        # Plot Prediction (Red Dashed)
+                        ax.plot(pred_np[:, d], label='Prediction', color='red', linestyle='--', alpha=0.8, linewidth=2)
+                        
+                        # 3. Highlight the "History" Context if used
+                        if val_delay > 0:
+                            ax.axvline(x=val_delay - 1, color='blue', linestyle=':', alpha=0.5)
+                            ax.axvspan(0, val_delay - 1, color='blue', alpha=0.1, label='Conditioning (History)')
+                            
+                        ax.set_ylabel(f'Dim {d}')
+                        ax.grid(True, alpha=0.3)
+                        if d == 0:
+                            ax.legend(loc='upper right', fontsize='small')
+
+                    plt.tight_layout()
+                    
+                    # 4. Add Image to step_log
+                    step_log['train_trajectory_vis'] = wandb.Image(fig)
+                    
+                    plt.close(fig)
+                    
+                    del fig
+                    del axes
                     del batch
                     del obs_dict
                     del gt_action
@@ -447,6 +524,8 @@ class TrainDP3Workspace:
             exclude_keys = tuple()
         if include_keys is None:
             include_keys = payload['pickles'].keys()
+            # cprint(f"KEYS LOADED BY DEFAULT: {include_keys}", "green")
+            # cprint(f"PAYLOAD ITEMS: {payload.keys()} {payload['state_dicts'].keys()}", "green")
 
         for key, value in payload['state_dicts'].items():
             if key not in exclude_keys:

@@ -1,26 +1,22 @@
 # Examples:
-# bash scripts/train_policy.sh rtc_flow_match franka_peartable_test 0322 0 0
-# bash scripts/train_policy.sh dp3 adroit_hammer 0322 0 0
-# bash scripts/train_policy.sh dp3 dexart_laptop 0322 0 0
-# bash scripts/train_policy.sh simple_dp3 adroit_hammer 0322 0 0
-# bash scripts/train_policy.sh dp3 metaworld_basketball 0602 0 0
-
-
+# bash scripts/user_study/train_round2.sh USER_NAME PROTOCOL
 
 DEBUG=False
 save_ckpt=True
 
-alg_name=${1}
-task_name=${2}
+user_id=${1}
+protocol=${2} # "single" or "multiple"
+alg_name=rtc_flow_match_rgb_sirius
+task_name=franka_banana_rgb_sirius
 config_name=${alg_name}
-addition_info=${3}
-seed=${4}
+addition_info=0322
+seed=0
 exp_name=${task_name}-${alg_name}-${addition_info}
-run_dir="data/outputs/${exp_name}_seed${seed}"
+run_dir="data_sirius/user_study/${user_id}/${protocol}/output/round2/${exp_name}_seed${seed}"
 
+dataset_path=data_sirius/user_study/${user_id}/${protocol}/combined_round2.zarr
 
-# gpu_id=$(bash scripts/find_gpu.sh)
-gpu_id=${5}
+gpu_id=0
 echo -e "\033[33mgpu id (to use): ${gpu_id}\033[0m"
 
 
@@ -48,7 +44,8 @@ python train.py --config-name=${config_name}.yaml \
                             training.device="cuda:0" \
                             exp_name=${exp_name} \
                             logging.mode=${wandb_mode} \
-                            checkpoint.save_ckpt=${save_ckpt}
+                            checkpoint.save_ckpt=${save_ckpt} \
+                            task.dataset.zarr_path=${dataset_path}
 
 
 

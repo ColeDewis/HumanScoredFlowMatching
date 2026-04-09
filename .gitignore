@@ -45,3 +45,6 @@ personal_TASK.md
 easytrain.sh
 nohup.out
 output/
+
+plotting/*
+*.zip
